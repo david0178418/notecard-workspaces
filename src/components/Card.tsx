@@ -56,7 +56,9 @@ function Card({ cardId }: CardProps) {
   }, [lastCreatedCardId, cardId, setLastCreatedCardId]); // Add dependencies
 
   // --- Text Editing --- //
-  const handleDoubleClick = useCallback(() => {
+  const handleDoubleClick = useCallback((event: React.MouseEvent) => {
+    // Stop propagation to prevent workspace double-click handler
+    event.stopPropagation();
     if (cardData) {
       setEditText(cardData.text);
       setIsEditing(true);
