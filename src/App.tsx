@@ -1,24 +1,87 @@
 import React from 'react';
-import { Box } from '@mui/material';
-import { useAtomValue } from 'jotai';
-import { currentWorkspaceIdAtom } from './state/atoms';
-import Toolbar from './components/Toolbar';
+import { Box, Fab, Drawer, IconButton } from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
+import AddIcon from '@mui/icons-material/Add';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import {
+  currentWorkspaceIdAtom,
+  sidebarOpenAtom, // Import sidebar state
+  toggleThemeModeAtom, // Import theme toggle
+  themeModeAtom, // Import theme mode
+  addCardAtom, // Import add card action
+} from './state/atoms';
+// import Toolbar from './components/Toolbar'; // No longer needed
 import Workspace from './components/Workspace';
-// Import WorkspaceSwitcher if it's not part of the Toolbar
+import SidebarContent from './components/SidebarContent'; // Import sidebar content
 
 function App() {
-  // Get current workspace ID from Jotai
   const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
+  const [isSidebarOpen, setIsSidebarOpen] = useAtom(sidebarOpenAtom);
+  const toggleTheme = useSetAtom(toggleThemeModeAtom);
+  const currentMode = useAtomValue(themeModeAtom);
+  const addCard = useSetAtom(addCardAtom);
+
+  const toggleDrawer = (open: boolean) => (event: React.KeyboardEvent | React.MouseEvent) => {
+    if (
+      event.type === 'keydown' &&
+      ((event as React.KeyboardEvent).key === 'Tab' ||
+        (event as React.KeyboardEvent).key === 'Shift')
+    ) {
+      return;
+    }
+    setIsSidebarOpen(open);
+  };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <Toolbar />
-      <Box sx={{ flexGrow: 1, position: 'relative' /* For positioning Workspace content */ }}>
-        {/* Render workspace only if an ID is set */}
+    // Main container for positioning
+    <Box sx={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden' }}>
+      {/* Sidebar Drawer */}
+      <Drawer anchor="left" open={isSidebarOpen} onClose={toggleDrawer(false)}>
+        <SidebarContent />
+      </Drawer>
+
+      {/* Menu FAB (Top Left) */}
+      <Fab
+        color="primary"
+        aria-label="open drawer"
+        onClick={toggleDrawer(true)}
+        sx={{ position: 'absolute', top: 16, left: 16, zIndex: 1100 /* Below drawer overlay */ }}
+        size="small"
+      >
+        <MenuIcon />
+      </Fab>
+
+      {/* Theme Toggle FAB (Top Right) */}
+      <Fab
+        color="secondary"
+        aria-label="toggle theme"
+        onClick={toggleTheme}
+        sx={{ position: 'absolute', top: 16, right: 16, zIndex: 1100 }}
+        size="small"
+      >
+        {currentMode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
+      </Fab>
+
+      {/* Add Card FAB (Bottom Right) */}
+      <Fab
+        color="primary"
+        aria-label="add card"
+        onClick={() => addCard({ text: '' })} // Call addCard action
+        sx={{ position: 'absolute', bottom: 16, right: 16, zIndex: 1100 }}
+        size="medium"
+        disabled={!currentWorkspaceId} // Disable if no workspace selected
+      >
+        <AddIcon />
+      </Fab>
+
+      {/* Workspace Area */}
+      <Box sx={{ height: '100%', width: '100%' }}>
         {currentWorkspaceId ? (
           <Workspace />
         ) : (
-          <Box sx={{ p: 3, textAlign: 'center' }}>
+          <Box sx={{ p: 3, textAlign: 'center', height: '100%', display:'flex', alignItems:'center', justifyContent:'center' }}>
             Create or select a workspace to begin.
           </Box>
         )}

@@ -91,6 +91,12 @@ export const toggleThemeModeAtom = atom(
   }
 );
 
+// Atom to control the visibility of the sidebar drawer
+export const sidebarOpenAtom = atom(false); // Default to closed
+
+// Atom to store the current size of the workspace viewport
+export const viewportSizeAtom = atom<{ width: number; height: number }>({ width: 0, height: 0 });
+
 // --- Action Atoms / Functions --- //
 // Note: We use atom(null, (get, set, ...) => ...) for actions that modify state.
 
@@ -328,6 +334,28 @@ export const deleteWorkspaceAtom = atom(
         currentWorkspaceId: finalCurrentId,
       };
     });
+  }
+);
+
+// Action atom to center the view on a specific point in workspace coordinates
+export const centerOnPointAtom = atom(
+  null,
+  (get, set, targetPoint: Point) => {
+    const { width: viewportWidth, height: viewportHeight } = get(viewportSizeAtom);
+    const { zoom } = get(currentViewStateAtom);
+
+    if (viewportWidth === 0 || viewportHeight === 0) {
+      console.warn('Cannot center, viewport size is zero.');
+      return;
+    }
+
+    // Calculate the pan needed to place targetPoint at the viewport center
+    const newPanX = viewportWidth / 2 - targetPoint.x * zoom;
+    const newPanY = viewportHeight / 2 - targetPoint.y * zoom;
+
+    // Update the view state using the existing atom
+    set(updateViewStateAtom, { pan: { x: newPanX, y: newPanY } /*, zoom */ });
+    // We only update pan for now, keeping zoom the same
   }
 );
 

@@ -1,7 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Box } from '@mui/material';
-import { useAtomValue } from 'jotai';
-import { currentCardsAtom, currentViewStateAtom } from '../state/atoms';
+import { useAtomValue, useSetAtom } from 'jotai';
+import {
+  currentCardsAtom,
+  currentViewStateAtom,
+  viewportSizeAtom,
+} from '../state/atoms';
 import { usePanZoom } from '../hooks/usePanZoom';
 import Card from './Card'; // Import the Card component
 
@@ -11,6 +15,7 @@ function Workspace() {
   // Get state from Jotai
   const cards = useAtomValue(currentCardsAtom);
   const initialViewState = useAtomValue(currentViewStateAtom);
+  const setViewportSize = useSetAtom(viewportSizeAtom); // Get setter for viewport size
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -19,6 +24,32 @@ function Workspace() {
     containerProps, // Props to spread onto the container element
     contentTransform, // Transform string for the content wrapper
   } = usePanZoom({ initialViewState, containerRef });
+
+  // Effect to update viewport size atom on resize
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    // Initial size update
+    setViewportSize({ width: element.clientWidth, height: element.clientHeight });
+
+    // Observe size changes
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        // Use contentRect for more accurate dimensions
+        const { width, height } = entry.contentRect;
+        console.log(`[Workspace] Resized to ${width}x${height}`); // LOG
+        setViewportSize({ width, height });
+      }
+    });
+
+    resizeObserver.observe(element);
+
+    // Cleanup observer on unmount
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [setViewportSize]); // Dependency on the atom setter
 
   return (
     <Box
