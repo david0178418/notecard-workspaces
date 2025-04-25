@@ -11,7 +11,7 @@ function Toolbar() {
 
   const handleNewCard = useCallback(() => {
     // Only pass the text, position is calculated by the atom
-    addCard({ text: 'New Card' });
+    addCard({ text: '' });
   }, [addCard]);
 
   const handleNewWorkspace = useCallback(() => {

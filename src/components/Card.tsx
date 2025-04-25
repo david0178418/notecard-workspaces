@@ -402,6 +402,7 @@ function Card({ cardId }: CardProps) {
             onBlur={handleTextBlur}
             onKeyDown={handleTextKeyDown}
             autoFocus
+            placeholder="New Card"
             InputProps={{ disableUnderline: true }}
             sx={{
               // Target the textarea for text alignment and padding
@@ -424,7 +425,7 @@ function Card({ cardId }: CardProps) {
               maxHeight: '100%' // Ensure Typography doesn't exceed CardContent height
             }}
           >
-            {cardData.text}
+            {cardData.text || "New Card"}
           </Typography>
         )}
         <IconButton
