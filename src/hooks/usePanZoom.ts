@@ -16,10 +16,12 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
 
   const updateStateAtom = useSetAtom(updateViewStateAtom);
 
-  // Update atom when local state changes
+  // Effect 2: Update internal state if the initialViewState prop changes
   useEffect(() => {
-    updateStateAtom({ pan, zoom });
-  }, [pan, zoom, updateStateAtom]);
+    console.log("[usePanZoom] initialViewState prop changed:", initialViewState);
+    setPan(initialViewState.pan);
+    setZoom(initialViewState.zoom);
+  }, [initialViewState]);
 
   // --- Zoom Logic --- //
   const handleWheel = useCallback(
@@ -44,12 +46,29 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
       // Calculate the new pan required to keep that point under the pointer after zoom
       const newPanX = pointerX - pointUnderPointerX * clampedZoom;
       const newPanY = pointerY - pointUnderPointerY * clampedZoom;
+      const newPan = { x: newPanX, y: newPanY }; // Create new object for atom update
 
       setZoom(clampedZoom);
-      setPan({ x: newPanX, y: newPanY });
+      setPan(newPan);
+      // Update atom directly on zoom
+      updateStateAtom({ pan: newPan, zoom: clampedZoom });
     },
-    [zoom, pan, containerRef]
+    [zoom, pan, containerRef, updateStateAtom] // Add updateStateAtom dependency
   );
+
+  // --- Manual Event Listener Attachment for Wheel --- //
+  useEffect(() => {
+    const element = containerRef.current;
+    // Type assertion for the handler to satisfy addEventListener
+    const wheelHandler = handleWheel as unknown as EventListener;
+    if (element) {
+      // Explicitly cast options object
+      element.addEventListener('wheel', wheelHandler, { passive: false } as EventListenerOptions);
+      return () => {
+        element.removeEventListener('wheel', wheelHandler, { passive: false } as EventListenerOptions);
+      };
+    }
+  }, [containerRef, handleWheel]);
 
   // --- Pan Logic (Mouse) --- //
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
@@ -78,14 +97,18 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
     setPan({ x: newX, y: newY });
   }, []);
 
+  // Update atom only when panning STOPS
   const handleMouseUpOrLeave = useCallback(() => {
     if (isPanning.current) {
+      console.log("[usePanZoom] Mouse pan ended, updating atom:", { pan, zoom }); // LOG
+      // Update the atom with the final pan/zoom state
+      updateStateAtom({ pan, zoom });
       isPanning.current = false;
       if (containerRef.current) {
         containerRef.current.style.cursor = 'grab';
       }
     }
-  }, [containerRef]);
+  }, [containerRef, pan, zoom, updateStateAtom]); // Add pan, zoom, updateStateAtom dependency
 
   // --- Pan Logic (Touch) --- //
   // Store active touch identifier to handle multi-touch scenarios simply
@@ -139,10 +162,10 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
     }
   }, []);
 
+  // Update atom only when panning STOPS
   const handleTouchEndOrCancel = useCallback((event: React.TouchEvent) => {
-      // Check if the ended touch was the one we were tracking
-      let wasPanningTouch = false;
-      for(let i=0; i < event.changedTouches.length; i++){
+    let wasPanningTouch = false;
+    for(let i=0; i < event.changedTouches.length; i++){
         const changedTouch = event.changedTouches[i];
         if(changedTouch && changedTouch.identifier === touchIdentifier.current){
           wasPanningTouch = true;
@@ -151,13 +174,16 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
       }
 
       if (isPanning.current && wasPanningTouch) {
+          console.log("[usePanZoom] Touch pan ended, updating atom:", { pan, zoom }); // LOG
+          // Update the atom with the final pan/zoom state
+          updateStateAtom({ pan, zoom });
           isPanning.current = false;
           touchIdentifier.current = null;
           if (containerRef.current) {
               containerRef.current.style.cursor = 'grab';
           }
       }
-  }, [containerRef]);
+  }, [containerRef, pan, zoom, updateStateAtom]); // Add pan, zoom, updateStateAtom dependency
 
 
   return {
@@ -166,7 +192,6 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
     // zoom,
     containerProps: {
       ref: containerRef, // Pass the ref
-      onWheel: handleWheel,
       onMouseDown: handleMouseDown,
       onMouseMove: handleMouseMove,
       onMouseUp: handleMouseUpOrLeave,
