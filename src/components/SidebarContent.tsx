@@ -61,7 +61,7 @@ function SidebarContent() {
             <ListItem key={card.id} disablePadding>
               <ListItemButton onClick={() => handleCardClick(card.id)}>
                 <ListItemText
-                  primary={card.text.substring(0, 50) + (card.text.length > 50 ? '...' : 'New Card')}
+                  primary={(card.text || 'New Card').substring(0, 50) + ((card.text || 'New Card').length > 50 ? '...' : '')}
                 />
               </ListItemButton>
             </ListItem>
