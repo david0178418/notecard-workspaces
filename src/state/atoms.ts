@@ -163,7 +163,10 @@ export const addCardAtom = atom(
       };
     });
 
-    // Then, set the ID for autofocus trigger
+    // Second, add the new card ID to the interaction order
+    set(interactionOrderAtom, (prevOrder) => [...prevOrder, newCard.id]);
+
+    // Finally, set the ID for autofocus trigger
     set(lastCreatedCardIdAtom, newCard.id);
   }
 );
