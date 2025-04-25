@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { useSetAtom, useAtomValue } from 'jotai';
 import { updateCardSizeAtom, currentViewStateAtom, bringCardToFrontAtom } from '../state/atoms';
 import type { Point, CardSize, CardData } from '../types';
@@ -35,6 +35,7 @@ export function useResizable({
       resizeStartPointer.current = { x: clientX, y: clientY };
       resizeStartSize.current = { ...cardData.size };
       document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'nwse-resize';
     },
     [cardId, cardData?.size, bringToFront, isEnabled]
   );
@@ -52,20 +53,25 @@ export function useResizable({
   const handleResize = useCallback(
     (clientX: number, clientY: number) => {
       if (!isResizing || !resizeStartSize.current || !sizerRef.current || !cardData || !cardContentRef.current) return;
-      const deltaX = clientX - resizeStartPointer.current.x;
-      const deltaY = clientY - resizeStartPointer.current.y;
-      const newWidth = resizeStartSize.current.width + deltaX / zoom;
-      const newHeight = resizeStartSize.current.height + deltaY / zoom;
-      const clampedWidth = Math.max(MIN_CARD_WIDTH, newWidth);
-      const userClampedHeight = Math.max(MIN_CARD_HEIGHT, newHeight);
 
-      sizerRef.current.innerText = cardData.text;
-      sizerRef.current.style.width = `${clampedWidth}px`;
-      const textScrollHeight = sizerRef.current.scrollHeight;
-      const verticalPadding = getVerticalPadding();
-      const minHeightForText = textScrollHeight + verticalPadding;
-      const finalHeight = Math.max(userClampedHeight, minHeightForText, MIN_CARD_HEIGHT);
-      updateSize({ cardId, size: { width: clampedWidth, height: finalHeight } });
+      requestAnimationFrame(() => {
+        if (!isResizing || !resizeStartSize.current || !sizerRef.current || !cardData || !cardContentRef.current) return;
+
+        const deltaX = clientX - resizeStartPointer.current.x;
+        const deltaY = clientY - resizeStartPointer.current.y;
+        const newWidth = resizeStartSize.current.width + deltaX / zoom;
+        const newHeight = resizeStartSize.current.height + deltaY / zoom;
+        const clampedWidth = Math.max(MIN_CARD_WIDTH, newWidth);
+        const userClampedHeight = Math.max(MIN_CARD_HEIGHT, newHeight);
+
+        sizerRef.current.innerText = cardData.text ?? '';
+        sizerRef.current.style.width = `${clampedWidth}px`;
+        const textScrollHeight = sizerRef.current.scrollHeight;
+        const verticalPadding = getVerticalPadding();
+        const minHeightForText = textScrollHeight + verticalPadding;
+        const finalHeight = Math.max(userClampedHeight, minHeightForText, MIN_CARD_HEIGHT);
+        updateSize({ cardId, size: { width: clampedWidth, height: finalHeight } });
+      });
     },
     [cardId, isResizing, updateSize, zoom, cardData?.text, sizerRef, cardContentRef, getVerticalPadding]
   );
@@ -75,10 +81,68 @@ export function useResizable({
       setIsResizing(false);
       resizeStartSize.current = null;
       document.body.style.userSelect = '';
+      document.body.style.cursor = '';
     }
   }, [isResizing]);
 
-  // --- Event Handlers for resize handle --- //
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (isResizing) {
+        handleResize(event.clientX, event.clientY);
+      }
+    };
+    const handleMouseUp = (event: MouseEvent) => {
+      if (event.button === 0 && isResizing) {
+        endResize();
+      }
+    };
+
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, handleResize, endResize]);
+
+  useEffect(() => {
+    const handleTouchMove = (event: TouchEvent) => {
+      if (isResizing && event.touches.length === 1) {
+        const touch = event.touches[0];
+        if (touch) {
+          handleResize(touch.clientX, touch.clientY);
+        }
+      }
+    };
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (isResizing) {
+        endResize();
+      }
+    };
+
+    if (isResizing) {
+      window.addEventListener('touchmove', handleTouchMove, { passive: false });
+      window.addEventListener('touchend', handleTouchEnd);
+      window.addEventListener('touchcancel', handleTouchEnd);
+    } else {
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    }
+
+    return () => {
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [isResizing, handleResize, endResize]);
+
   const handleResizeMouseDown = useCallback(
     (event: React.MouseEvent) => {
       if (event.button !== 0 || !isEnabled) return;
@@ -105,12 +169,8 @@ export function useResizable({
     resizableHandleProps: {
       onMouseDown: handleResizeMouseDown,
       onTouchStart: handleResizeTouchStart,
-      // Include the data attribute for identification
       'data-resize-handle': 'true',
     },
-    // Pass internal handlers needed for global listeners
-    _handleResize: handleResize,
-    _endResize: endResize,
     _getVerticalPadding: getVerticalPadding,
   };
 } 
