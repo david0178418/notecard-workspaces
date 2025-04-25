@@ -1,13 +1,15 @@
 import { createTheme } from '@mui/material/styles';
+import { grey } from '@mui/material/colors';
 
 const lightTheme = createTheme({
   palette: {
     mode: 'light',
-    // You can customize the light theme further here
-    // background: {
-    //   default: '#f5f5f5',
-    //   paper: '#ffffff'
-    // }
+    // Customize the light theme background
+    background: {
+      default: grey[300], // Very light gray background for workspace
+      paper: '#ffffff', // Explicit white for cards/surfaces
+    }
+    // Other customizations if needed
   },
 });
 

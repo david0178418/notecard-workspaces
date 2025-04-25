@@ -6,9 +6,9 @@ import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { currentCardsAtom, updateCardPositionAtom, updateCardTextAtom, deleteCardAtom, currentViewStateAtom, updateCardSizeAtom } from '../state/atoms';
 import type { Point, CardSize } from '../types';
 
-// Define minimum card size
-const MIN_CARD_WIDTH = 100;
-const MIN_CARD_HEIGHT = 50;
+// Define minimum card size and EXPORT them
+export const MIN_CARD_WIDTH = 100;
+export const MIN_CARD_HEIGHT = 50;
 
 interface CardProps {
   cardId: string;
