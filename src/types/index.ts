@@ -3,12 +3,17 @@ export interface Point {
   y: number;
 }
 
+export interface CardSize {
+  width: number;
+  height: number;
+}
+
 export interface CardData {
   id: string;
   text: string;
   position: Point;
+  size?: CardSize;
   // Optional properties can be added later, e.g.:
-  // size?: { width: number; height: number };
   // color?: string;
 }
 

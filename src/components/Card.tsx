@@ -1,9 +1,14 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Card as MuiCard, CardContent, Typography, TextField, Box, IconButton } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/DeleteForever'; // Example delete icon
+import ResizeIcon from '@mui/icons-material/AspectRatio'; // Or another suitable icon
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-import { currentCardsAtom, updateCardPositionAtom, updateCardTextAtom, deleteCardAtom, currentViewStateAtom } from '../state/atoms';
-import type { Point } from '../types';
+import { currentCardsAtom, updateCardPositionAtom, updateCardTextAtom, deleteCardAtom, currentViewStateAtom, updateCardSizeAtom } from '../state/atoms';
+import type { Point, CardSize } from '../types';
+
+// Define minimum card size
+const MIN_CARD_WIDTH = 100;
+const MIN_CARD_HEIGHT = 50;
 
 interface CardProps {
   cardId: string;
@@ -16,14 +21,19 @@ function Card({ cardId }: CardProps) {
   const updatePosition = useSetAtom(updateCardPositionAtom);
   const updateText = useSetAtom(updateCardTextAtom);
   const deleteCard = useSetAtom(deleteCardAtom);
+  const updateSize = useSetAtom(updateCardSizeAtom); // Use new atom
 
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(cardData?.text ?? '');
   const [isDraggingState, setIsDraggingState] = useState(false);
+  const [isResizing, setIsResizing] = useState(false); // <-- State for resizing
   const cardRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const dragStartOffset = useRef<Point>({ x: 0, y: 0 });
   const touchIdentifier = useRef<number | null>(null);
+  // Refs for resizing
+  const resizeStartPointer = useRef<Point>({ x: 0, y: 0 });
+  const resizeStartSize = useRef<CardSize | null>(null);
 
   // Update local edit text if card data changes externally
   useEffect(() => {
@@ -117,48 +127,93 @@ function Card({ cardId }: CardProps) {
     }
   }, []);
 
-  // Mouse drag handlers
-  const handleMouseDown = (event: React.MouseEvent) => {
-    console.log(`[Card ${cardId}] handleMouseDown fired`);
-    if (event.button !== 0 || isEditing) {
-      console.log(`[Card ${cardId}] handleMouseDown ignored (button!=0 or editing)`);
-      return;
+  // --- Resizing --- //
+  const startResize = useCallback((clientX: number, clientY: number) => {
+      if (!cardData?.size) return; // Should have size by now
+      console.log(`[Card ${cardId}] startResize called`);
+      setIsResizing(true);
+      resizeStartPointer.current = { x: clientX, y: clientY };
+      resizeStartSize.current = { ...cardData.size }; // Store starting size
+      document.body.style.userSelect = 'none'; // Prevent selection during resize
+  }, [cardData?.size]);
+
+  const handleResize = useCallback((clientX: number, clientY: number) => {
+    if (!isResizing || !resizeStartSize.current) return;
+
+    const deltaX = clientX - resizeStartPointer.current.x;
+    const deltaY = clientY - resizeStartPointer.current.y;
+
+    // Calculate new dimensions based on delta, accounting for zoom
+    const newWidth = resizeStartSize.current.width + deltaX / zoom;
+    const newHeight = resizeStartSize.current.height + deltaY / zoom;
+
+    // Enforce minimum dimensions
+    const clampedWidth = Math.max(MIN_CARD_WIDTH, newWidth);
+    const clampedHeight = Math.max(MIN_CARD_HEIGHT, newHeight);
+
+    updateSize({ cardId, size: { width: clampedWidth, height: clampedHeight } });
+
+  }, [cardId, isResizing, updateSize, zoom]);
+
+  const endResize = useCallback(() => {
+    if (isResizing) {
+        console.log(`[Card ${cardId}] endResize called`);
+        setIsResizing(false);
+        resizeStartSize.current = null;
+        document.body.style.userSelect = '';
     }
-    console.log(`[Card ${cardId}] handleMouseDown calling stopPropagation`);
-    event.stopPropagation(); // Prevent workspace pan
-    console.log(`[Card ${cardId}] handleMouseDown calling startDrag`);
+  }, [isResizing]);
+
+  // --- Event Handlers for Card Element --- //
+  const handleCardMouseDown = (event: React.MouseEvent) => {
+    if ((event.target as Element).closest('[data-resize-handle="true"]') || event.button !== 0 || isEditing) return;
+    event.stopPropagation();
     startDrag(event.clientX, event.clientY);
   };
+  const handleCardTouchStart = (event: React.TouchEvent) => {
+    if ((event.target as Element).closest('[data-resize-handle="true"]') || event.touches.length !== 1 || isEditing) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    event.stopPropagation();
+    startDrag(touch.clientX, touch.clientY, touch.identifier);
+  };
 
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-    if (isDragging.current && touchIdentifier.current === null) {
-      handleDrag(event.clientX, event.clientY);
-    }
-  }, [handleDrag]);
-
-  const handleMouseUp = useCallback((event: MouseEvent) => {
-    if (event.button === 0 && touchIdentifier.current === null) {
-        endDrag();
-    }
-  }, [endDrag]);
-
-  // Touch drag handlers
-  const handleTouchStart = (event: React.TouchEvent) => {
-    console.log(`[Card ${cardId}] handleTouchStart fired`);
-    if (event.touches.length === 1 && !isEditing) {
+  // --- Event Handlers for Resize Handle --- //
+  const handleResizeMouseDown = (event: React.MouseEvent) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    startResize(event.clientX, event.clientY);
+  };
+  const handleResizeTouchStart = (event: React.TouchEvent) => {
+    if (event.touches.length === 1) {
       const touch = event.touches[0];
       if (!touch) return;
-      console.log(`[Card ${cardId}] handleTouchStart calling stopPropagation`);
-      event.stopPropagation(); // Prevent workspace pan
-      console.log(`[Card ${cardId}] handleTouchStart calling startDrag`);
-      startDrag(touch.clientX, touch.clientY, touch.identifier);
-    } else {
-       console.log(`[Card ${cardId}] handleTouchStart ignored (touches!=1 or editing)`);
+      event.stopPropagation();
+      startResize(touch.clientX, touch.clientY);
     }
   };
 
+  // --- Global Listeners --- //
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    if (isDraggingState && touchIdentifier.current === null) {
+      handleDrag(event.clientX, event.clientY);
+    } else if (isResizing) {
+      handleResize(event.clientX, event.clientY);
+    }
+  }, [isDraggingState, isResizing, handleDrag, handleResize]);
+
+  const handleMouseUp = useCallback((event: MouseEvent) => {
+    if (event.button === 0) {
+      if (isDraggingState && touchIdentifier.current === null) {
+        endDrag();
+      } else if (isResizing) {
+        endResize();
+      }
+    }
+  }, [isDraggingState, isResizing, endDrag, endResize]);
+
   const handleTouchMove = useCallback((event: TouchEvent) => {
-    if (isDragging.current && touchIdentifier.current !== null) {
+    if (isDraggingState && touchIdentifier.current !== null) {
       let activeTouch: Touch | null = null;
       for (let i = 0; i < event.touches.length; i++) {
         const t = event.touches[i];
@@ -170,8 +225,14 @@ function Card({ cardId }: CardProps) {
       if (activeTouch) {
         handleDrag(activeTouch.clientX, activeTouch.clientY);
       }
+    } else if (isResizing) {
+      // Assume single touch for resize
+      if (event.touches.length === 1) {
+        const touch = event.touches[0];
+        if (touch) handleResize(touch.clientX, touch.clientY);
+      }
     }
-  }, [handleDrag]);
+  }, [isDraggingState, isResizing, handleDrag, handleResize]);
 
   const handleTouchEnd = useCallback((event: TouchEvent) => {
       let wasDraggingTouch = false;
@@ -184,13 +245,16 @@ function Card({ cardId }: CardProps) {
       }
       if (wasDraggingTouch) {
           endDrag();
+      } else if (isResizing) {
+          endResize();
       }
-  }, [endDrag]);
+  }, [isResizing, endDrag, endResize]);
 
-  // Add/Remove global listeners based on isDraggingState
+  // (useEffect for adding/removing global listeners)
   useEffect(() => {
-    if (isDraggingState) {
-      console.log(`[Card ${cardId}] useEffect adding global listeners`);
+    const isActive = isDraggingState || isResizing;
+    if (isActive) {
+      console.log(`[Card ${cardId}] useEffect adding global listeners (drag: ${isDraggingState}, resize: ${isResizing})`);
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       window.addEventListener('touchmove', handleTouchMove);
@@ -205,7 +269,7 @@ function Card({ cardId }: CardProps) {
         window.removeEventListener('touchcancel', handleTouchEnd);
       };
     }
-  }, [isDraggingState, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
+  }, [isDraggingState, isResizing, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
   // --- Deletion --- //
   const handleDelete = useCallback(() => {
@@ -218,26 +282,41 @@ function Card({ cardId }: CardProps) {
     return null;
   }
 
+  // Use default size if not set (should be set by addCardAtom now)
+  const currentSize = cardData.size ?? { width: MIN_CARD_WIDTH, height: MIN_CARD_HEIGHT };
+
   return (
     <MuiCard
       ref={cardRef}
       data-draggable-card="true"
       sx={{
         position: 'absolute',
-        // Apply position from Jotai state
         left: cardData.position.x,
         top: cardData.position.y,
-        minWidth: 150,
+        width: currentSize.width, // Apply width
+        height: currentSize.height, // Apply height
         cursor: isEditing ? 'default' : 'grab',
-        userSelect: isEditing ? 'text' : 'none', // Allow text selection only when editing
-        zIndex: isDraggingState ? 1000 : 1, // Use state for zIndex
-        opacity: isDraggingState ? 0.8 : 1, // Use state for opacity
+        userSelect: isEditing ? 'text' : 'none',
+        zIndex: (isDraggingState || isResizing) ? 1000 : 1, // Use state for zIndex
+        opacity: isDraggingState ? 0.8 : 1,
+        overflow: 'hidden', // Hide content overflow during resize
+        display: 'flex', // Use flex for content layout
+        flexDirection: 'column' // Stack content vertically
       }}
-      onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
+      onMouseDown={handleCardMouseDown}
+      onTouchStart={handleCardTouchStart}
       onDoubleClick={handleDoubleClick}
     >
-      <CardContent sx={{ position: 'relative', padding: '16px', paddingRight: '40px' /* Space for delete */ }}>
+      <CardContent
+        sx={{
+            position: 'relative', 
+            padding: '16px', 
+            paddingBottom: '24px', // Ensure space below text/textfield
+            paddingRight: '40px',
+            flexGrow: 1, // Allow content to take available space
+            overflowY: 'auto' // Allow text content to scroll if needed
+        }}
+        >
         {isEditing ? (
           <TextField
             multiline
@@ -274,6 +353,28 @@ function Card({ cardId }: CardProps) {
           <DeleteIcon fontSize="inherit" />
         </IconButton>
       </CardContent>
+
+      {/* Resize Handle */}
+      <Box
+        data-resize-handle="true"
+        onMouseDown={handleResizeMouseDown}
+        onTouchStart={handleResizeTouchStart}
+        sx={{
+            position: 'absolute',
+            bottom: 0,
+            right: 0,
+            width: 20,
+            height: 20,
+            cursor: 'nwse-resize',
+            // background: 'rgba(0,0,0,0.1)', // Optional visual indication
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'flex-end',
+            color: 'action.active'
+        }}
+      >
+        <ResizeIcon fontSize="small" sx={{ transform: 'rotate(90deg)' }}/>
+      </Box>
     </MuiCard>
   );
 }

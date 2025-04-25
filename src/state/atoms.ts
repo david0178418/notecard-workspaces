@@ -1,7 +1,10 @@
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import { atom } from 'jotai';
-import type { AppState, WorkspaceData, CardData, Point, ViewState } from '../types';
+import type { AppState, WorkspaceData, CardData, Point, ViewState, CardSize } from '../types';
 import { nanoid } from 'nanoid'; // Using nanoid for unique IDs
+
+const DEFAULT_CARD_WIDTH = 200;
+const DEFAULT_CARD_HEIGHT = 100;
 
 // Define the initial state conforming to the AppState interface
 const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace
@@ -92,15 +95,14 @@ export const addCardAtom = atom(
     const currentId = get(currentWorkspaceIdAtom);
     if (!currentId) return;
     const viewState = get(currentViewStateAtom);
-    // Calculate position near the top-left of the current view
-    // Adjust by a small offset so it's not exactly at the edge
     const positionX = (-viewState.pan.x / viewState.zoom) + 50 / viewState.zoom;
     const positionY = (-viewState.pan.y / viewState.zoom) + 50 / viewState.zoom;
 
     const newCard: CardData = {
-      text: newCardData.text, // Use provided text
-      position: { x: positionX, y: positionY }, // Calculated position
-      id: nanoid(), // Generate unique ID
+      text: newCardData.text,
+      position: { x: positionX, y: positionY },
+      size: { width: DEFAULT_CARD_WIDTH, height: DEFAULT_CARD_HEIGHT },
+      id: nanoid(),
     };
 
     set(appStateAtom, (prev) => {
@@ -172,6 +174,34 @@ export const updateCardTextAtom = atom(
             cards: {
               ...currentWorkspace.cards,
               [cardId]: { ...currentWorkspace.cards[cardId], text },
+            },
+          },
+        },
+      };
+    });
+  }
+);
+
+// Action to update a specific card's size
+export const updateCardSizeAtom = atom(
+  null,
+  (get, set, { cardId, size }: { cardId: string; size: CardSize }) => {
+    const currentId = get(currentWorkspaceIdAtom);
+    if (!currentId) return;
+
+    set(appStateAtom, (prev) => {
+      const currentWorkspace = prev.workspaces[currentId];
+      if (!currentWorkspace?.cards[cardId]) return prev; // Card doesn't exist
+
+      return {
+        ...prev,
+        workspaces: {
+          ...prev.workspaces,
+          [currentId]: {
+            ...currentWorkspace,
+            cards: {
+              ...currentWorkspace.cards,
+              [cardId]: { ...currentWorkspace.cards[cardId], size },
             },
           },
         },
