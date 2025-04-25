@@ -12,16 +12,17 @@ interface CardProps {
 function Card({ cardId }: CardProps) {
   const cards = useAtomValue(currentCardsAtom);
   const cardData = cards[cardId];
-  const { zoom } = useAtomValue(currentViewStateAtom); // Needed for drag calculations
+  const { pan, zoom } = useAtomValue(currentViewStateAtom);
   const updatePosition = useSetAtom(updateCardPositionAtom);
   const updateText = useSetAtom(updateCardTextAtom);
   const deleteCard = useSetAtom(deleteCardAtom);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(cardData?.text ?? '');
+  const [isDraggingState, setIsDraggingState] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
-  const dragStartOffset = useRef<Point>({ x: 0, y: 0 }); // Offset from card corner to pointer
+  const dragStartOffset = useRef<Point>({ x: 0, y: 0 });
   const touchIdentifier = useRef<number | null>(null);
 
   // Update local edit text if card data changes externally
@@ -62,69 +63,97 @@ function Card({ cardId }: CardProps) {
 
   // --- Dragging --- //
   const startDrag = useCallback((clientX: number, clientY: number, identifier?: number) => {
-    if (!cardRef.current || !cardData) return;
+    console.log(`[Card ${cardId}] startDrag called`);
+    if (!cardRef.current || !cardData) {
+      console.log(`[Card ${cardId}] startDrag aborted (no ref or data)`);
+      return;
+    }
     isDragging.current = true;
+    setIsDraggingState(true);
+    console.log(`[Card ${cardId}] isDragging.current = true, isDraggingState = true`);
     if (identifier !== undefined) {
       touchIdentifier.current = identifier;
     }
-    const rect = cardRef.current.getBoundingClientRect();
-    // Calculate offset from top-left corner where drag started
-    // We need to account for the current page zoom
+
+    // Calculate pointer position in workspace coordinates
+    const pointerWorkspaceX = (clientX - pan.x) / zoom;
+    const pointerWorkspaceY = (clientY - pan.y) / zoom;
+
+    // Calculate offset relative to card's *workspace position*
     dragStartOffset.current = {
-      x: (clientX - rect.left) / zoom,
-      y: (clientY - rect.top) / zoom,
+      x: pointerWorkspaceX - cardData.position.x,
+      y: pointerWorkspaceY - cardData.position.y,
     };
-    // Prevent text selection during drag
+    console.log(`[Card ${cardId}] Calculated drag offset:`, dragStartOffset.current);
+
     document.body.style.userSelect = 'none';
     if (cardRef.current) cardRef.current.style.cursor = 'grabbing';
-  }, [cardData, zoom]);
+  }, [cardData, pan, zoom, setIsDraggingState]);
 
   const handleDrag = useCallback((clientX: number, clientY: number) => {
     if (!isDragging.current || !cardData) return;
-    // Calculate the new top-left position in *workspace coordinates*
-    const newPositionX = clientX / zoom - dragStartOffset.current.x;
-    const newPositionY = clientY / zoom - dragStartOffset.current.y;
-    // We directly update the position without local state for smoother dragging
+
+    // Calculate pointer position in workspace coordinates
+    const pointerWorkspaceX = (clientX - pan.x) / zoom;
+    const pointerWorkspaceY = (clientY - pan.y) / zoom;
+
+    // Calculate the new top-left position in workspace coordinates
+    // by subtracting the drag offset (which is relative to the card's top-left)
+    const newPositionX = pointerWorkspaceX - dragStartOffset.current.x;
+    const newPositionY = pointerWorkspaceY - dragStartOffset.current.y;
+
     updatePosition({ cardId, position: { x: newPositionX, y: newPositionY } });
-  }, [cardId, cardData, updatePosition, zoom]);
+    // No need to update local state, rely on Jotai update cycle
+  }, [cardId, cardData, updatePosition, pan, zoom]);
 
   const endDrag = useCallback(() => {
     if (isDragging.current) {
+      console.log(`[Card ${cardId}] endDrag called`);
       isDragging.current = false;
+      setIsDraggingState(false);
       touchIdentifier.current = null;
-      document.body.style.userSelect = ''; // Re-enable text selection
+      document.body.style.userSelect = '';
       if (cardRef.current) cardRef.current.style.cursor = 'grab';
     }
   }, []);
 
   // Mouse drag handlers
   const handleMouseDown = (event: React.MouseEvent) => {
-    // Only start drag on left click and not when editing text
-    if (event.button !== 0 || isEditing) return;
+    console.log(`[Card ${cardId}] handleMouseDown fired`);
+    if (event.button !== 0 || isEditing) {
+      console.log(`[Card ${cardId}] handleMouseDown ignored (button!=0 or editing)`);
+      return;
+    }
+    console.log(`[Card ${cardId}] handleMouseDown calling stopPropagation`);
     event.stopPropagation(); // Prevent workspace pan
+    console.log(`[Card ${cardId}] handleMouseDown calling startDrag`);
     startDrag(event.clientX, event.clientY);
   };
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
-    // Listen globally for mouse move when dragging
-    if (isDragging.current && touchIdentifier.current === null) { // Ensure it's a mouse drag
+    if (isDragging.current && touchIdentifier.current === null) {
       handleDrag(event.clientX, event.clientY);
     }
   }, [handleDrag]);
 
   const handleMouseUp = useCallback((event: MouseEvent) => {
-    if (event.button === 0 && touchIdentifier.current === null) { // Only end mouse drag
+    if (event.button === 0 && touchIdentifier.current === null) {
         endDrag();
     }
   }, [endDrag]);
 
   // Touch drag handlers
   const handleTouchStart = (event: React.TouchEvent) => {
+    console.log(`[Card ${cardId}] handleTouchStart fired`);
     if (event.touches.length === 1 && !isEditing) {
       const touch = event.touches[0];
       if (!touch) return;
+      console.log(`[Card ${cardId}] handleTouchStart calling stopPropagation`);
       event.stopPropagation(); // Prevent workspace pan
+      console.log(`[Card ${cardId}] handleTouchStart calling startDrag`);
       startDrag(touch.clientX, touch.clientY, touch.identifier);
+    } else {
+       console.log(`[Card ${cardId}] handleTouchStart ignored (touches!=1 or editing)`);
     }
   };
 
@@ -158,16 +187,17 @@ function Card({ cardId }: CardProps) {
       }
   }, [endDrag]);
 
-  // Add/Remove global listeners for mouse/touch move/end
+  // Add/Remove global listeners based on isDraggingState
   useEffect(() => {
-    if (isDragging.current) {
-      // Use window listeners for events outside the card element
+    if (isDraggingState) {
+      console.log(`[Card ${cardId}] useEffect adding global listeners`);
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       window.addEventListener('touchmove', handleTouchMove);
       window.addEventListener('touchend', handleTouchEnd);
       window.addEventListener('touchcancel', handleTouchEnd);
       return () => {
+        console.log(`[Card ${cardId}] useEffect removing global listeners`);
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
         window.removeEventListener('touchmove', handleTouchMove);
@@ -175,7 +205,7 @@ function Card({ cardId }: CardProps) {
         window.removeEventListener('touchcancel', handleTouchEnd);
       };
     }
-  }, [isDragging.current, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
+  }, [isDraggingState, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
   // --- Deletion --- //
   const handleDelete = useCallback(() => {
@@ -191,6 +221,7 @@ function Card({ cardId }: CardProps) {
   return (
     <MuiCard
       ref={cardRef}
+      data-draggable-card="true"
       sx={{
         position: 'absolute',
         // Apply position from Jotai state
@@ -199,8 +230,8 @@ function Card({ cardId }: CardProps) {
         minWidth: 150,
         cursor: isEditing ? 'default' : 'grab',
         userSelect: isEditing ? 'text' : 'none', // Allow text selection only when editing
-        zIndex: isDragging.current ? 1000 : 1, // Bring to front while dragging
-        opacity: isDragging.current ? 0.8 : 1,
+        zIndex: isDraggingState ? 1000 : 1, // Use state for zIndex
+        opacity: isDraggingState ? 0.8 : 1, // Use state for opacity
       }}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}

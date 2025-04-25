@@ -53,6 +53,17 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
 
   // --- Pan Logic (Mouse) --- //
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    console.log("[Workspace] handleMouseDown fired");
+    const targetElement = event.target as Element;
+    const closestCard = targetElement.closest('[data-draggable-card="true"]');
+    console.log("[Workspace] Closest card check:", closestCard);
+
+    // Check if the event target is inside a draggable card
+    if (closestCard) {
+      console.log("[Workspace] Detected card drag, ignoring pan.");
+      return; // Don't pan the workspace if dragging a card
+    }
+    console.log("[Workspace] Initiating pan.");
     isPanning.current = true;
     startPanPoint.current = { x: event.clientX - pan.x, y: event.clientY - pan.y };
     if (containerRef.current) {
@@ -81,7 +92,20 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
   const touchIdentifier = useRef<number | null>(null);
 
   const handleTouchStart = useCallback((event: React.TouchEvent) => {
+    console.log("[Workspace] handleTouchStart fired");
+    const targetElement = event.target as Element;
+    const closestCard = targetElement.closest('[data-draggable-card="true"]');
+    console.log("[Workspace] Closest card check:", closestCard);
+
+    // Check if the event target is inside a draggable card
+    if (closestCard) {
+      console.log("[Workspace] Detected card drag, ignoring pan.");
+      return; // Don't pan the workspace if dragging a card
+    }
+    console.log("[Workspace] Touch check passed, checking touch count.");
+
     if (event.touches.length === 1) { // Only pan with one finger
+      console.log("[Workspace] Initiating pan via touch.");
       const touch = event.touches[0];
       if (!touch) return;
       isPanning.current = true;
@@ -90,6 +114,8 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
       if (containerRef.current) {
         containerRef.current.style.cursor = 'grabbing'; // May not be visible on touch
       }
+    } else {
+      console.log("[Workspace] Ignoring touch pan (touch count != 1)");
     }
   }, [pan, containerRef]);
 
