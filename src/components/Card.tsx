@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Card as MuiCard, CardContent, Typography, TextField, Box, IconButton } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/DeleteForever'; // Example delete icon
 import ResizeIcon from '@mui/icons-material/AspectRatio'; // Or another suitable icon
@@ -285,24 +285,36 @@ function Card({ cardId }: CardProps) {
   // Use default size if not set (should be set by addCardAtom now)
   const currentSize = cardData.size ?? { width: MIN_CARD_WIDTH, height: MIN_CARD_HEIGHT };
 
+  // Memoize dynamic styles applied via the style prop
+  const dynamicStyles = useMemo((): React.CSSProperties => ({
+    left: cardData.position.x,
+    top: cardData.position.y,
+    width: currentSize.width,
+    height: currentSize.height,
+    zIndex: (isDraggingState || isResizing) ? 1000 : 1,
+    opacity: isDraggingState ? 0.8 : 1,
+    position: 'absolute', 
+  }), [
+    cardData.position.x,
+    cardData.position.y,
+    currentSize.width,
+    currentSize.height,
+    isDraggingState,
+    isResizing,
+  ]);
+
   return (
     <MuiCard
       ref={cardRef}
       data-draggable-card="true"
       sx={{
-        position: 'absolute',
-        left: cardData.position.x,
-        top: cardData.position.y,
-        width: currentSize.width, // Apply width
-        height: currentSize.height, // Apply height
         cursor: isEditing ? 'default' : 'grab',
         userSelect: isEditing ? 'text' : 'none',
-        zIndex: (isDraggingState || isResizing) ? 1000 : 1, // Use state for zIndex
-        opacity: isDraggingState ? 0.8 : 1,
-        overflow: 'hidden', // Hide content overflow during resize
-        display: 'flex', // Use flex for content layout
-        flexDirection: 'column' // Stack content vertically
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
       }}
+      style={dynamicStyles}
       onMouseDown={handleCardMouseDown}
       onTouchStart={handleCardTouchStart}
       onDoubleClick={handleDoubleClick}
@@ -366,7 +378,6 @@ function Card({ cardId }: CardProps) {
             width: 20,
             height: 20,
             cursor: 'nwse-resize',
-            // background: 'rgba(0,0,0,0.1)', // Optional visual indication
             display: 'flex',
             alignItems: 'flex-end',
             justifyContent: 'flex-end',
