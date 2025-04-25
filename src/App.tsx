@@ -80,7 +80,7 @@ function App() {
         color="primary"
         aria-label="add card"
         onClick={handleAddCardClick} // Use the new handler
-        sx={{ position: 'absolute', bottom: 16, right: 16, zIndex: 1100 }}
+        sx={{ position: 'absolute', bottom: 48, right: 16, zIndex: 1100 }}
         size="medium"
         disabled={!currentWorkspaceId} // Disable if no workspace selected
       >
