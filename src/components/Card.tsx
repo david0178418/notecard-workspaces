@@ -64,13 +64,12 @@ function Card({ cardId }: CardProps) {
   }, [cardId, cardData, editText, updateText]);
 
   const handleTextKeyDown = useCallback((event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      handleTextBlur(); // Save on Enter
-      event.preventDefault();
-    } else if (event.key === 'Escape') {
+    if (event.key === 'Escape') {
       setEditText(cardData?.text ?? ''); // Revert on Escape
       setIsEditing(false);
+      event.preventDefault(); // Prevent other actions on Escape
     }
+    // Allow Enter key's default behavior (newline in multiline TextField)
   }, [handleTextBlur, cardData?.text]);
 
   // --- Dragging --- //
