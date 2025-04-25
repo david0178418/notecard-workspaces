@@ -9,6 +9,19 @@ const DEFAULT_CARD_HEIGHT = 100;
 // Type for theme mode
 export type ThemeMode = 'light' | 'dark';
 
+// Function to get the system's preferred theme or default to light
+const getSystemTheme = (): ThemeMode => {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return 'light';
+    }
+  }
+  return 'light'; // Default fallback
+};
+
 // Define the initial state conforming to the AppState interface
 const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace
 const initialAppState: AppState = {
@@ -66,8 +79,7 @@ export const currentViewStateAtom = atom<ViewState>((get) => {
 // Atom for storing the current theme mode, persisted to localStorage
 export const themeModeAtom = atomWithStorage<ThemeMode>(
   'notecardThemeMode', // Storage key
-  'light' // Default value
-  // No need for custom storage object if default localStorage JSON handling is fine
+  getSystemTheme() // Use system theme as the initial default
 );
 
 // Atom to toggle the theme mode
