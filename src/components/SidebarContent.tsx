@@ -4,6 +4,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel
 } from '@mui/material';
 import { useAtomValue, useSetAtom, useAtom } from 'jotai';
+import { useSnackbar } from 'notistack';
 import {
   currentCardsAtom,
   currentWorkspaceIdAtom,
@@ -25,6 +26,7 @@ function SidebarContent() {
   const [appState, setAppState] = useAtom(appStateAtom);
   const currentWorkspaceName = currentWorkspaceId ? appState.workspaces[currentWorkspaceId]?.name : '-';
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { enqueueSnackbar } = useSnackbar();
 
   // State for Export Dialog
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
@@ -86,7 +88,7 @@ function SidebarContent() {
     });
 
     if (Object.keys(workspacesToExport).length === 0) {
-      alert("Please select at least one workspace to export.");
+      enqueueSnackbar("Please select at least one workspace to export.", { variant: 'warning' });
       return;
     }
 
@@ -156,7 +158,7 @@ function SidebarContent() {
         }
       } catch (error) {
         console.error('Failed to parse or validate import file:', error);
-        alert(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        enqueueSnackbar(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`, { variant: 'error' });
       } finally {
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -165,7 +167,7 @@ function SidebarContent() {
     };
     reader.onerror = (error) => {
       console.error('Failed to read file:', reader.error);
-      alert(`Failed to read file: ${reader.error}`);
+      enqueueSnackbar(`Failed to read file: ${reader.error}`, { variant: 'error' });
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -189,7 +191,7 @@ function SidebarContent() {
     });
 
      if (Object.keys(workspacesToImport).length === 0) {
-      alert("Please select at least one workspace to import.");
+      enqueueSnackbar("Please select at least one workspace to import.", { variant: 'warning' });
       return;
     }
 
@@ -198,18 +200,23 @@ function SidebarContent() {
         const newWorkspaces = { ...prev.workspaces };
         let conflicts = false;
         for (const id in workspacesToImport) {
-            if (newWorkspaces[id]) {
+            const importedWs = workspacesToImport[id];
+            // Ensure importedWs is not undefined before proceeding (shouldn't happen based on previous logic, but good for type safety)
+            if (!importedWs) continue;
+
+            const existingWs = newWorkspaces[id];
+            if (existingWs) {
                 // Simple conflict handling: Overwrite existing workspace with the same ID
-                console.warn(`Workspace ID conflict: Overwriting existing workspace "${newWorkspaces[id].name}" with imported workspace "${workspacesToImport[id].name}" (ID: ${id})`);
+                console.warn(`Workspace ID conflict: Overwriting existing workspace "${existingWs.name}" with imported workspace "${importedWs.name}" (ID: ${id})`);
                 conflicts = true;
             }
-            newWorkspaces[id] = workspacesToImport[id];
+            newWorkspaces[id] = importedWs; // Now TS knows importedWs is WorkspaceData
         }
         // Note: currentWorkspaceId is NOT updated here. The user stays in their current workspace.
         if (conflicts) {
-            alert("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.");
+            enqueueSnackbar("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.", { variant: 'warning' });
         } else {
-            alert("Selected workspaces imported successfully!");
+            enqueueSnackbar("Selected workspaces imported successfully!", { variant: 'success' });
         }
         return {
             ...prev,
@@ -222,7 +229,7 @@ function SidebarContent() {
     setIsImportDialogOpen(false); // Close dialog
     setImportedWorkspaces({}); // Clear imported data
     setImportSelection({}); // Clear selection
-  }, [importedWorkspaces, importSelection, setAppState]);
+  }, [importedWorkspaces, importSelection, setAppState, enqueueSnackbar]); // Added enqueueSnackbar dependency
 
   const handleCancelImport = useCallback(() => {
     setIsImportDialogOpen(false);
@@ -316,20 +323,23 @@ function SidebarContent() {
         <DialogTitle>Select Workspaces to Import</DialogTitle>
         <DialogContent>
           <List>
-             {importedWorkspaceList.map((ws) => (
-              <ListItem key={ws.id} disablePadding>
-                 <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={!!importSelection[ws.id]}
-                        onChange={handleImportSelectionChange}
-                        name={ws.id}
+             {importedWorkspaceList.map((ws) => {
+                const existingWs = appState.workspaces[ws.id]; // Check if workspace exists
+                return (
+                  <ListItem key={ws.id} disablePadding>
+                    <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={!!importSelection[ws.id]}
+                            onChange={handleImportSelectionChange}
+                            name={ws.id}
+                          />
+                        }
+                        label={`${ws.name}${existingWs ? ' (Overwrite Existing)' : ''}`} // Use existingWs check
                       />
-                    }
-                    label={`${ws.name}${appState.workspaces[ws.id] ? ' (Overwrite Existing)' : ''}`} // Indicate overwrite
-                  />
-              </ListItem>
-            ))}
+                  </ListItem>
+                );
+            })}
           </List>
           {importedWorkspaceList.length === 0 && <Typography>No valid workspaces found in the file.</Typography>}
         </DialogContent>

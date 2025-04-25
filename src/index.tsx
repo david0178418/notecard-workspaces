@@ -10,6 +10,9 @@ import { themeModeAtom } from './state/atoms'; // Import theme state atom
 import lightTheme from './theme/light'; // Import light theme
 import darkTheme from './theme/dark'; // Import dark theme
 
+// Notistack setup
+import { SnackbarProvider } from 'notistack';
+
 // Main component to conditionally apply the theme
 function ThemedApp() {
   const mode = useAtomValue(themeModeAtom);
@@ -33,6 +36,9 @@ const root = ReactDOM.createRoot(rootElement);
 
 root.render(
   <React.StrictMode>
-    <ThemedApp />
+    {/* Wrap with SnackbarProvider */}
+    <SnackbarProvider maxSnack={3}>
+      <ThemedApp />
+    </SnackbarProvider>
   </React.StrictMode>
 );
