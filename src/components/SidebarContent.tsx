@@ -15,7 +15,7 @@ import {
 } from '../state/atoms';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
-import type { AppState, WorkspaceData } from '../types';
+import type { WorkspaceData } from '../types';
 
 function SidebarContent() {
   const cards = useAtomValue(currentCardsAtom);
@@ -165,7 +165,7 @@ function SidebarContent() {
         }
       }
     };
-    reader.onerror = (error) => {
+    reader.onerror = (_error) => {
       console.error('Failed to read file:', reader.error);
       enqueueSnackbar(`Failed to read file: ${reader.error}`, { variant: 'error' });
       if (fileInputRef.current) {

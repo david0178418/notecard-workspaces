@@ -120,7 +120,7 @@ export function useResizable({
         }
       }
     };
-    const handleTouchEnd = (event: TouchEvent) => {
+    const handleTouchEnd = (_event: TouchEvent) => {
       if (isResizing) {
         endResize();
       }

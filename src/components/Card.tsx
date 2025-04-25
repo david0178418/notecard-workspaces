@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Card as MuiCard, CardContent, Typography, TextField, Box, IconButton } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/DeleteForever'; // Example delete icon
 import ResizeIcon from '@mui/icons-material/AspectRatio'; // Or another suitable icon
@@ -11,14 +11,13 @@ import {
   lastCreatedCardIdAtom,
   updateCardSizeAtom,
 } from '../state/atoms';
-import type { CardData } from '../types';
 import { useDraggable } from '../hooks/useDraggable';
 import { useResizable } from '../hooks/useResizable';
 import { useTheme } from '@mui/material/styles';
 
 // Define minimum card size and EXPORT them
-export const MIN_CARD_WIDTH = 100;
-export const MIN_CARD_HEIGHT = 50;
+export const MIN_CARD_WIDTH = 150;
+export const MIN_CARD_HEIGHT = 80;
 
 interface CardProps {
   cardId: string;
