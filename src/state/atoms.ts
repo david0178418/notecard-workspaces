@@ -280,7 +280,7 @@ export const deleteCardAtom = atom(
 );
 
 // Action to create a new workspace
-export const createWorkspaceAtom = atom(null, (get, set, name: string) => {
+export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
   const newId = nanoid();
   const newWorkspace: WorkspaceData = {
     id: newId,
@@ -302,7 +302,7 @@ export const createWorkspaceAtom = atom(null, (get, set, name: string) => {
 // Action to switch the current workspace
 export const switchWorkspaceAtom = atom(
   null,
-  (get, set, workspaceId: string) => {
+  (_get, set, workspaceId: string) => {
     set(appStateAtom, (prev) => {
       if (!prev.workspaces[workspaceId]) return prev; // Don't switch if ID is invalid
       return {
@@ -316,7 +316,7 @@ export const switchWorkspaceAtom = atom(
 // Action to delete a workspace
 export const deleteWorkspaceAtom = atom(
   null,
-  (get, set, workspaceId: string) => {
+  (_get, set, workspaceId: string) => {
     set(appStateAtom, (prev) => {
       if (!prev.workspaces[workspaceId]) return prev; // Doesn't exist
       const workspaceKeys = Object.keys(prev.workspaces);

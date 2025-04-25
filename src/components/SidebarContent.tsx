@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { Box, List, ListItem, ListItemButton, ListItemText, Divider, Button, Typography } from '@mui/material';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {

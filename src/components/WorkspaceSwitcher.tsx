@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { Select, MenuItem, FormControl, InputLabel, Box } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import { useAtomValue, useSetAtom } from 'jotai';
