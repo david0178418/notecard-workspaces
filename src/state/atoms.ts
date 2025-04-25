@@ -329,7 +329,7 @@ export const deleteWorkspaceAtom = atom(
       if (finalCurrentId === workspaceId) {
         // If deleting the current one, switch to the first remaining one
         const remainingKeys = Object.keys(remainingWorkspaces);
-        finalCurrentId = remainingKeys.length > 0 ? remainingKeys[0] : null;
+        finalCurrentId = remainingKeys[0] ?? null;
       }
 
       // The type of finalCurrentId is now guaranteed to be string | null
