@@ -8,11 +8,30 @@ interface UsePanZoomProps {
   containerRef: React.RefObject<HTMLElement | null>;
 }
 
+// Helper function to calculate distance between two points
+function getDistance(p1: Point, p2: Point): number {
+  return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+}
+
+// Helper function to calculate the midpoint between two points
+function getMidpoint(p1: Point, p2: Point): Point {
+  return {
+    x: (p1.x + p2.x) / 2,
+    y: (p1.y + p2.y) / 2,
+  };
+}
+
 export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) {
   const [pan, setPan] = useState<Point>(initialViewState.pan);
   const [zoom, setZoom] = useState<number>(initialViewState.zoom);
   const isPanning = useRef(false);
+  const isPinching = useRef(false); // <-- Ref for pinching state
   const startPanPoint = useRef<Point>({ x: 0, y: 0 });
+  const touchIdentifier = useRef<number | null>(null);
+
+  // Refs for pinch gesture state
+  const pinchTouches = useRef<[number, number] | null>(null); // Store IDs of two fingers
+  const initialPinchState = useRef<{ distance: number, midpoint: Point, pan: Point, zoom: number } | null>(null);
 
   const updateStateAtom = useSetAtom(updateViewStateAtom);
 
@@ -103,69 +122,144 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
   }, [containerRef, pan, zoom, updateStateAtom]); // Add pan, zoom, updateStateAtom dependency
 
   // --- Pan Logic (Touch) --- //
-  const touchIdentifier = useRef<number | null>(null);
-  const handleTouchStart = useCallback((event: React.TouchEvent) => {
-    const targetElement = event.target as Element;
-    const closestCard = targetElement.closest('[data-draggable-card="true"]');
-    if (closestCard) {
-      return;
-    }
+  const handleTouchStart = useCallback(
+    (event: React.TouchEvent) => {
+      const targetElement = event.target as Element;
+      const closestCard = targetElement.closest('[data-draggable-card="true"]');
+      if (closestCard) return; // Ignore touches starting on cards
 
-    if (event.touches.length === 1) {
-      const touch = event.touches[0]; // Get touch object
-      if (!touch) return; // Add check for touch existence
-      isPanning.current = true;
-      touchIdentifier.current = touch.identifier;
-      startPanPoint.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
-      if (containerRef.current) {
-        containerRef.current.style.cursor = 'grabbing';
+      // --- Pinch Start Detection ---
+      if (event.touches.length === 2) {
+        isPanning.current = false; // Stop panning if starting pinch
+        isPinching.current = true;
+        const touch1 = event.touches[0];
+        const touch2 = event.touches[1];
+        if (!touch1 || !touch2) return; // Should not happen
+
+        pinchTouches.current = [touch1.identifier, touch2.identifier];
+        const p1 = { x: touch1.clientX, y: touch1.clientY };
+        const p2 = { x: touch2.clientX, y: touch2.clientY };
+
+        initialPinchState.current = {
+          distance: getDistance(p1, p2),
+          midpoint: getMidpoint(p1, p2),
+          pan: { ...pan }, // Store initial pan/zoom at pinch start
+          zoom: zoom,
+        };
+        console.log("Pinch started", initialPinchState.current); // LOG
       }
-    } else {
-      // console.log("[Workspace] Ignoring touch pan (touch count != 1)");
-    }
-  }, [pan, containerRef]);
-
-  const handleTouchMove = useCallback((event: React.TouchEvent) => {
-    if (!isPanning.current || touchIdentifier.current === null) return;
-
-    // Find the active touch
-    let activeTouch: React.Touch | null = null;
-    for (let i = 0; i < event.touches.length; i++) {
-      const currentTouch = event.touches[i];
-      if (currentTouch && currentTouch.identifier === touchIdentifier.current) {
-        activeTouch = currentTouch;
-        break;
-      }
-    }
-
-    if (activeTouch) {
-      const newX = activeTouch.clientX - startPanPoint.current.x;
-      const newY = activeTouch.clientY - startPanPoint.current.y;
-      setPan({ x: newX, y: newY });
-    }
-  }, []);
-
-  // Update atom only when panning STOPS
-  const handleTouchEndOrCancel = useCallback((event: React.TouchEvent) => {
-    let wasPanningTouch = false;
-    for(let i=0; i < event.changedTouches.length; i++){
-        const changedTouch = event.changedTouches[i];
-        if(changedTouch && changedTouch.identifier === touchIdentifier.current){
-          wasPanningTouch = true;
-          break;
+      // --- Single Finger Pan Start ---
+      else if (event.touches.length === 1 && !isPinching.current) {
+        isPanning.current = true;
+        const touch = event.touches[0];
+        if (!touch) return;
+        touchIdentifier.current = touch.identifier;
+        startPanPoint.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
+        if (containerRef.current) {
+          containerRef.current.style.cursor = 'grabbing';
         }
       }
+    },
+    [pan, zoom, containerRef] // Added zoom dependency
+  );
 
-      if (isPanning.current && wasPanningTouch) {
-          updateStateAtom({ pan, zoom });
+  const handleTouchMove = useCallback(
+    (event: React.TouchEvent) => {
+      // --- Pinch Move Logic ---
+      if (isPinching.current && event.touches.length === 2 && pinchTouches.current && initialPinchState.current) {
+        let currentTouch1: Touch | null = null;
+        let currentTouch2: Touch | null = null;
+        for (let i = 0; i < event.touches.length; i++) {
+          const touch = event.touches.item(i) as Touch | null;
+          if (touch?.identifier === pinchTouches.current?.[0]) currentTouch1 = touch;
+          if (touch?.identifier === pinchTouches.current?.[1]) currentTouch2 = touch;
+        }
+
+        if (currentTouch1 && currentTouch2) {
+          const p1 = { x: currentTouch1.clientX, y: currentTouch1.clientY };
+          const p2 = { x: currentTouch2.clientX, y: currentTouch2.clientY };
+          const currentDistance = getDistance(p1, p2);
+          const currentMidpoint = getMidpoint(p1, p2);
+
+          const { distance: initialDistance, midpoint: initialMidpoint, pan: initialPan, zoom: initialZoom } = initialPinchState.current;
+
+          if (initialDistance === 0) return; // Avoid divide by zero
+
+          // Calculate new zoom
+          const zoomFactor = currentDistance / initialDistance;
+          const newZoom = initialZoom * zoomFactor;
+          const clampedZoom = Math.max(0.1, Math.min(newZoom, 10));
+
+          // Calculate workspace point under initial midpoint
+          const initialMidpointWorkspaceX = (initialMidpoint.x - initialPan.x) / initialZoom;
+          const initialMidpointWorkspaceY = (initialMidpoint.y - initialPan.y) / initialZoom;
+
+          // Calculate new pan to keep that point under the current midpoint
+          const newPanX = currentMidpoint.x - initialMidpointWorkspaceX * clampedZoom;
+          const newPanY = currentMidpoint.y - initialMidpointWorkspaceY * clampedZoom;
+          const newPan = { x: newPanX, y: newPanY };
+
+          // Apply the new pan and zoom
+          setZoom(clampedZoom);
+          setPan(newPan);
+
+          // Optimization: Update initial state for smoother continuous pinch?
+          // Or rely on state update triggering re-render?
+          // Let's try relying on state update first.
+        }
+      }
+      // --- Single Finger Pan Move ---
+      else if (isPanning.current && touchIdentifier.current !== null) {
+        let activeTouch: Touch | null = null;
+        for (let i = 0; i < event.touches.length; i++) {
+          const touch = event.touches.item(i) as Touch | null;
+          if (touch && touch.identifier === touchIdentifier.current) {
+            activeTouch = touch;
+            break;
+          }
+        }
+        if (activeTouch) {
+          const newX = activeTouch.clientX - startPanPoint.current.x;
+          const newY = activeTouch.clientY - startPanPoint.current.y;
+          setPan({ x: newX, y: newY });
+        }
+      }
+    },
+    [] // Dependencies handled implicitly via refs and state setters
+  );
+
+  const handleTouchEndOrCancel = useCallback(
+    (event: React.TouchEvent) => {
+      // If pinch was active, finalize state update
+      if (isPinching.current) {
+        console.log("Pinch ended, updating atom", { pan, zoom }); // LOG
+        updateStateAtom({ pan, zoom }); // Update global state
+        isPinching.current = false;
+        initialPinchState.current = null;
+        pinchTouches.current = null;
+      }
+      // If panning was active, finalize state update
+      else {
+        let wasPanningTouch = false;
+        for (let i = 0; i < event.changedTouches.length; i++) {
+          const changedTouch = event.changedTouches.item(i) as Touch | null;
+          if (changedTouch && changedTouch.identifier === touchIdentifier.current) {
+            wasPanningTouch = true;
+            break;
+          }
+        }
+        if (isPanning.current && wasPanningTouch) {
+          updateStateAtom({ pan, zoom }); // Update global state
           isPanning.current = false;
           touchIdentifier.current = null;
           if (containerRef.current) {
-              containerRef.current.style.cursor = 'grab';
+            containerRef.current.style.cursor = 'grab';
           }
+        }
       }
-  }, [containerRef, pan, zoom, updateStateAtom]); // Add pan, zoom, updateStateAtom dependency
-
+    },
+    [containerRef, pan, zoom, updateStateAtom] // Add dependencies
+  );
 
   return {
     // We return the state directly, the useEffect handles atom updates
