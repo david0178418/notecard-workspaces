@@ -38,6 +38,7 @@ function Workspace() {
           height: '100%',
           transform: contentTransform,
           transformOrigin: 'top left',
+          willChange: 'transform',
         }}
       >
         {/* Render cards */}

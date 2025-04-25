@@ -312,7 +312,8 @@ function Card({ cardId }: CardProps) {
         userSelect: isEditing ? 'text' : 'none',
         overflow: 'hidden',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        willChange: 'transform, opacity',
       }}
       style={dynamicStyles}
       onMouseDown={handleCardMouseDown}
