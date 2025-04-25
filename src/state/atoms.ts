@@ -6,6 +6,9 @@ import { nanoid } from 'nanoid'; // Using nanoid for unique IDs
 const DEFAULT_CARD_WIDTH = 200;
 const DEFAULT_CARD_HEIGHT = 100;
 
+// Type for theme mode
+export type ThemeMode = 'light' | 'dark';
+
 // Define the initial state conforming to the AppState interface
 const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace
 const initialAppState: AppState = {
@@ -59,6 +62,22 @@ export const currentViewStateAtom = atom<ViewState>((get) => {
   // Provide a default view state if somehow the workspace doesn't exist
   return currentWorkspace?.viewState ?? { pan: { x: 0, y: 0 }, zoom: 1 };
 });
+
+// Atom for storing the current theme mode, persisted to localStorage
+export const themeModeAtom = atomWithStorage<ThemeMode>(
+  'notecardThemeMode', // Storage key
+  'light' // Default value
+  // No need for custom storage object if default localStorage JSON handling is fine
+);
+
+// Atom to toggle the theme mode
+export const toggleThemeModeAtom = atom(
+  null, // Read function is not needed
+  (get, set) => {
+    const currentMode = get(themeModeAtom);
+    set(themeModeAtom, currentMode === 'light' ? 'dark' : 'light');
+  }
+);
 
 // --- Action Atoms / Functions --- //
 // Note: We use atom(null, (get, set, ...) => ...) for actions that modify state.

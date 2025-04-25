@@ -26,7 +26,7 @@ function Workspace() {
         flexGrow: 1,
         height: '100%', // Explicitly set height
         overflow: 'hidden',
-        background: '#e0e0e0'
+        bgcolor: 'background.default'
       }}
       {...containerProps}
     >
