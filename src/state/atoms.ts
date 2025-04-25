@@ -97,6 +97,9 @@ export const sidebarOpenAtom = atom(false); // Default to closed
 // Atom to store the current size of the workspace viewport
 export const viewportSizeAtom = atom<{ width: number; height: number }>({ width: 0, height: 0 });
 
+// Atom to store the order of card interaction (most recent at the end)
+export const interactionOrderAtom = atom<string[]>([]);
+
 // Atom to temporarily store the ID of the last created card for autofocus
 export const lastCreatedCardIdAtom = atom<string | null>(null);
 
@@ -358,6 +361,17 @@ export const centerOnPointAtom = atom(
     // Update the view state using the existing atom
     set(updateViewStateAtom, { pan: { x: newPanX, y: newPanY } /*, zoom */ });
     // We only update pan for now, keeping zoom the same
+  }
+);
+
+// Action to bring a specific card to the front visually by updating interaction order
+export const bringCardToFrontAtom = atom(
+  null,
+  (get, set, cardId: string) => {
+    const currentOrder = get(interactionOrderAtom);
+    // Remove the ID if it exists, then add it to the end
+    const newOrder = currentOrder.filter(id => id !== cardId).concat(cardId);
+    set(interactionOrderAtom, newOrder);
   }
 );
 

@@ -3,7 +3,7 @@ import { Card as MuiCard, CardContent, Typography, TextField, Box, IconButton } 
 import DeleteIcon from '@mui/icons-material/DeleteForever'; // Example delete icon
 import ResizeIcon from '@mui/icons-material/AspectRatio'; // Or another suitable icon
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-import { currentCardsAtom, updateCardPositionAtom, updateCardTextAtom, deleteCardAtom, currentViewStateAtom, updateCardSizeAtom, lastCreatedCardIdAtom } from '../state/atoms';
+import { currentCardsAtom, updateCardPositionAtom, updateCardTextAtom, deleteCardAtom, currentViewStateAtom, updateCardSizeAtom, lastCreatedCardIdAtom, interactionOrderAtom, bringCardToFrontAtom } from '../state/atoms';
 import type { Point, CardSize } from '../types';
 
 // Define minimum card size and EXPORT them
@@ -23,6 +23,8 @@ function Card({ cardId }: CardProps) {
   const deleteCard = useSetAtom(deleteCardAtom);
   const updateSize = useSetAtom(updateCardSizeAtom); // Use new atom
   const [lastCreatedCardId, setLastCreatedCardId] = useAtom(lastCreatedCardIdAtom);
+  const bringToFront = useSetAtom(bringCardToFrontAtom);
+  const interactionOrder = useAtomValue(interactionOrderAtom);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(cardData?.text ?? '');
@@ -87,6 +89,7 @@ function Card({ cardId }: CardProps) {
 
   // --- Dragging --- //
   const startDrag = useCallback((clientX: number, clientY: number, identifier?: number) => {
+    bringToFront(cardId); // Bring card to front on interaction start
     console.log(`[Card ${cardId}] startDrag called`);
     if (!cardRef.current || !cardData) {
       console.log(`[Card ${cardId}] startDrag aborted (no ref or data)`);
@@ -112,7 +115,7 @@ function Card({ cardId }: CardProps) {
 
     document.body.style.userSelect = 'none';
     if (cardRef.current) cardRef.current.style.cursor = 'grabbing';
-  }, [cardData, pan, zoom, setIsDraggingState]);
+  }, [cardData, pan, zoom, setIsDraggingState, bringToFront, cardId]);
 
   const handleDrag = useCallback((clientX: number, clientY: number) => {
     if (!isDragging.current || !cardData) return;
@@ -143,13 +146,14 @@ function Card({ cardId }: CardProps) {
 
   // --- Resizing --- //
   const startResize = useCallback((clientX: number, clientY: number) => {
-      if (!cardData?.size) return; // Should have size by now
-      console.log(`[Card ${cardId}] startResize called`);
-      setIsResizing(true);
-      resizeStartPointer.current = { x: clientX, y: clientY };
-      resizeStartSize.current = { ...cardData.size }; // Store starting size
-      document.body.style.userSelect = 'none'; // Prevent selection during resize
-  }, [cardData?.size]);
+    bringToFront(cardId); // Bring card to front on interaction start
+    if (!cardData?.size) return;
+    console.log(`[Card ${cardId}] startResize called`);
+    setIsResizing(true);
+    resizeStartPointer.current = { x: clientX, y: clientY };
+    resizeStartSize.current = { ...cardData.size }; // Store starting size
+    document.body.style.userSelect = 'none'; // Prevent selection during resize
+  }, [cardData?.size, bringToFront, cardId]);
 
   const handleResize = useCallback((clientX: number, clientY: number) => {
     if (!isResizing || !resizeStartSize.current || !sizerRef.current || !cardData) return;
@@ -340,21 +344,31 @@ function Card({ cardId }: CardProps) {
   const currentSize = cardData.size ?? { width: MIN_CARD_WIDTH, height: MIN_CARD_HEIGHT };
 
   // Memoize dynamic styles applied via the style prop
-  const dynamicStyles = useMemo((): React.CSSProperties => ({
-    left: cardData.position.x,
-    top: cardData.position.y,
-    width: currentSize.width,
-    height: currentSize.height,
-    zIndex: (isDraggingState || isResizing) ? 1000 : 1,
-    opacity: isDraggingState ? 0.8 : 1,
-    position: 'absolute', 
-  }), [
+  const dynamicStyles = useMemo((): React.CSSProperties => {
+    // Calculate zIndex based on interaction order
+    const baseZIndex = interactionOrder.findIndex(id => id === cardId);
+    const zIndex = (isDraggingState || isResizing)
+        ? interactionOrder.length + 10 // Highest value during interaction
+        : (baseZIndex >= 0 ? baseZIndex + 1 : 1); // Based on order, default 1
+
+    return {
+      left: cardData.position.x,
+      top: cardData.position.y,
+      width: currentSize.width,
+      height: currentSize.height,
+      zIndex: zIndex, // Use calculated zIndex
+      opacity: isDraggingState ? 0.8 : 1,
+      position: 'absolute',
+    };
+  }, [
     cardData.position.x,
     cardData.position.y,
     currentSize.width,
     currentSize.height,
     isDraggingState,
     isResizing,
+    interactionOrder, // Depend on interaction order
+    cardId, // Need cardId for findIndex
   ]);
 
   // Define sizer styles (mirror Typography styles)
