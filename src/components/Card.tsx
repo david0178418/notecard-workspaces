@@ -322,18 +322,20 @@ function Card({ cardId }: CardProps) {
     >
       <CardContent
         sx={{
-            position: 'relative', 
-            padding: '16px', 
-            paddingBottom: '24px', // Ensure space below text/textfield
-            paddingRight: '40px',
-            flexGrow: 1, // Allow content to take available space
-            overflowY: 'auto' // Allow text content to scroll if needed
+            position: 'relative',
+            padding: '8px 8px 8px 8px', // Minimal padding, adjust as needed
+            paddingRight: '40px', // Keep space for delete button
+            flexGrow: 1,
+            display: 'flex',
+            alignItems: 'center', // Vertical center
+            justifyContent: 'center', // Horizontal center
+            overflow: 'hidden', // Prevent content itself from overflowing CardContent bounds
         }}
         >
         {isEditing ? (
           <TextField
             multiline
-            fullWidth
+            fullWidth // Allow TextField to fill the centered space
             variant="standard"
             value={editText}
             onChange={handleTextChange}
@@ -341,10 +343,26 @@ function Card({ cardId }: CardProps) {
             onKeyDown={handleTextKeyDown}
             autoFocus
             InputProps={{ disableUnderline: true }}
-            sx={{ textarea: { padding: 0 } }} // Remove padding inside textarea
+            sx={{
+              // Target the textarea for text alignment and padding
+              '& .MuiInputBase-inputMultiline': {
+                textAlign: 'center',
+                padding: 0, // Remove internal padding
+                lineHeight: 1.2, // Adjust line height for better centering
+              },
+              width: '100%', // Ensure it fills flex item width
+            }}
           />
         ) : (
-          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' /* Preserve whitespace */ }}>
+          <Typography
+            variant="body2"
+            sx={{
+              whiteSpace: 'pre-wrap',
+              textAlign: 'center', // Center text within Typography
+              overflowY: 'auto', // Allow scrolling if text overflows card size
+              maxHeight: '100%' // Ensure Typography doesn't exceed CardContent height
+            }}
+          >
             {cardData.text}
           </Typography>
         )}
