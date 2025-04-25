@@ -97,6 +97,9 @@ export const sidebarOpenAtom = atom(false); // Default to closed
 // Atom to store the current size of the workspace viewport
 export const viewportSizeAtom = atom<{ width: number; height: number }>({ width: 0, height: 0 });
 
+// Atom to temporarily store the ID of the last created card for autofocus
+export const lastCreatedCardIdAtom = atom<string | null>(null);
+
 // --- Action Atoms / Functions --- //
 // Note: We use atom(null, (get, set, ...) => ...) for actions that modify state.
 
@@ -138,10 +141,10 @@ export const addCardAtom = atom(
       id: nanoid(),
     };
 
+    // First, update the main state with the new card
     set(appStateAtom, (prev) => {
       const currentWorkspace = prev.workspaces[currentId];
       if (!currentWorkspace) return prev;
-
       return {
         ...prev,
         workspaces: {
@@ -156,6 +159,9 @@ export const addCardAtom = atom(
         },
       };
     });
+
+    // Then, set the ID for autofocus trigger
+    set(lastCreatedCardIdAtom, newCard.id);
   }
 );
 

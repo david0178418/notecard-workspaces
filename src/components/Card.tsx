@@ -3,7 +3,7 @@ import { Card as MuiCard, CardContent, Typography, TextField, Box, IconButton } 
 import DeleteIcon from '@mui/icons-material/DeleteForever'; // Example delete icon
 import ResizeIcon from '@mui/icons-material/AspectRatio'; // Or another suitable icon
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-import { currentCardsAtom, updateCardPositionAtom, updateCardTextAtom, deleteCardAtom, currentViewStateAtom, updateCardSizeAtom } from '../state/atoms';
+import { currentCardsAtom, updateCardPositionAtom, updateCardTextAtom, deleteCardAtom, currentViewStateAtom, updateCardSizeAtom, lastCreatedCardIdAtom } from '../state/atoms';
 import type { Point, CardSize } from '../types';
 
 // Define minimum card size and EXPORT them
@@ -22,6 +22,7 @@ function Card({ cardId }: CardProps) {
   const updateText = useSetAtom(updateCardTextAtom);
   const deleteCard = useSetAtom(deleteCardAtom);
   const updateSize = useSetAtom(updateCardSizeAtom); // Use new atom
+  const [lastCreatedCardId, setLastCreatedCardId] = useAtom(lastCreatedCardIdAtom);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(cardData?.text ?? '');
@@ -43,6 +44,16 @@ function Card({ cardId }: CardProps) {
       setEditText(cardData.text);
     }
   }, [cardData?.text, isEditing]); // Dependency includes optional chaining
+
+  // Effect to trigger edit mode for the last created card
+  useEffect(() => {
+    if (lastCreatedCardId === cardId) {
+      console.log(`[Card ${cardId}] Autofocusing new card`); // LOG
+      setIsEditing(true);
+      // Clear the trigger so it doesn't re-focus on subsequent renders
+      setLastCreatedCardId(null);
+    }
+  }, [lastCreatedCardId, cardId, setLastCreatedCardId]); // Add dependencies
 
   // --- Text Editing --- //
   const handleDoubleClick = useCallback(() => {

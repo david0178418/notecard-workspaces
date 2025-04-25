@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Box, Fab, Drawer, IconButton } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AddIcon from '@mui/icons-material/Add';
@@ -11,6 +11,8 @@ import {
   toggleThemeModeAtom, // Import theme toggle
   themeModeAtom, // Import theme mode
   addCardAtom, // Import add card action
+  currentViewStateAtom, // Import view state
+  viewportSizeAtom, // Import viewport size
 } from './state/atoms';
 // import Toolbar from './components/Toolbar'; // No longer needed
 import Workspace from './components/Workspace';
@@ -22,6 +24,8 @@ function App() {
   const toggleTheme = useSetAtom(toggleThemeModeAtom);
   const currentMode = useAtomValue(themeModeAtom);
   const addCard = useSetAtom(addCardAtom);
+  const viewState = useAtomValue(currentViewStateAtom); // Get view state
+  const viewportSize = useAtomValue(viewportSizeAtom); // Get viewport size
 
   const toggleDrawer = (open: boolean) => (event: React.KeyboardEvent | React.MouseEvent) => {
     if (
@@ -33,6 +37,16 @@ function App() {
     }
     setIsSidebarOpen(open);
   };
+
+  const handleAddCardClick = useCallback(() => {
+    // Calculate center of the viewport in workspace coordinates
+    const centerX = (viewportSize.width / 2 - viewState.pan.x) / viewState.zoom;
+    const centerY = (viewportSize.height / 2 - viewState.pan.y) / viewState.zoom;
+
+    console.log(`[App] FAB adding card at workspace coords:`, { x: centerX, y: centerY }); // LOG
+
+    addCard({ text: '', position: { x: centerX, y: centerY } });
+  }, [addCard, viewState, viewportSize]); // Add dependencies
 
   return (
     // Main container for positioning
@@ -68,7 +82,7 @@ function App() {
       <Fab
         color="primary"
         aria-label="add card"
-        onClick={() => addCard({ text: '' })} // Call addCard action
+        onClick={handleAddCardClick} // Use the new handler
         sx={{ position: 'absolute', bottom: 16, right: 16, zIndex: 1100 }}
         size="medium"
         disabled={!currentWorkspaceId} // Disable if no workspace selected
