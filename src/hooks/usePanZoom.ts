@@ -18,7 +18,6 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
 
   // Effect 2: Update internal state if the initialViewState prop changes
   useEffect(() => {
-    console.log("[usePanZoom] initialViewState prop changed:", initialViewState);
     setPan(initialViewState.pan);
     setZoom(initialViewState.zoom);
   }, [initialViewState]);
@@ -72,17 +71,12 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
 
   // --- Pan Logic (Mouse) --- //
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
-    console.log("[Workspace] handleMouseDown fired");
     const targetElement = event.target as Element;
     const closestCard = targetElement.closest('[data-draggable-card="true"]');
-    console.log("[Workspace] Closest card check:", closestCard);
 
-    // Check if the event target is inside a draggable card
     if (closestCard) {
-      console.log("[Workspace] Detected card drag, ignoring pan.");
-      return; // Don't pan the workspace if dragging a card
+      return;
     }
-    console.log("[Workspace] Initiating pan.");
     isPanning.current = true;
     startPanPoint.current = { x: event.clientX - pan.x, y: event.clientY - pan.y };
     if (containerRef.current) {
@@ -100,8 +94,6 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
   // Update atom only when panning STOPS
   const handleMouseUpOrLeave = useCallback(() => {
     if (isPanning.current) {
-      console.log("[usePanZoom] Mouse pan ended, updating atom:", { pan, zoom }); // LOG
-      // Update the atom with the final pan/zoom state
       updateStateAtom({ pan, zoom });
       isPanning.current = false;
       if (containerRef.current) {
@@ -111,34 +103,25 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
   }, [containerRef, pan, zoom, updateStateAtom]); // Add pan, zoom, updateStateAtom dependency
 
   // --- Pan Logic (Touch) --- //
-  // Store active touch identifier to handle multi-touch scenarios simply
   const touchIdentifier = useRef<number | null>(null);
-
   const handleTouchStart = useCallback((event: React.TouchEvent) => {
-    console.log("[Workspace] handleTouchStart fired");
     const targetElement = event.target as Element;
     const closestCard = targetElement.closest('[data-draggable-card="true"]');
-    console.log("[Workspace] Closest card check:", closestCard);
-
-    // Check if the event target is inside a draggable card
     if (closestCard) {
-      console.log("[Workspace] Detected card drag, ignoring pan.");
-      return; // Don't pan the workspace if dragging a card
+      return;
     }
-    console.log("[Workspace] Touch check passed, checking touch count.");
 
-    if (event.touches.length === 1) { // Only pan with one finger
-      console.log("[Workspace] Initiating pan via touch.");
-      const touch = event.touches[0];
-      if (!touch) return;
+    if (event.touches.length === 1) {
+      const touch = event.touches[0]; // Get touch object
+      if (!touch) return; // Add check for touch existence
       isPanning.current = true;
       touchIdentifier.current = touch.identifier;
       startPanPoint.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
       if (containerRef.current) {
-        containerRef.current.style.cursor = 'grabbing'; // May not be visible on touch
+        containerRef.current.style.cursor = 'grabbing';
       }
     } else {
-      console.log("[Workspace] Ignoring touch pan (touch count != 1)");
+      // console.log("[Workspace] Ignoring touch pan (touch count != 1)");
     }
   }, [pan, containerRef]);
 
@@ -174,8 +157,6 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
       }
 
       if (isPanning.current && wasPanningTouch) {
-          console.log("[usePanZoom] Touch pan ended, updating atom:", { pan, zoom }); // LOG
-          // Update the atom with the final pan/zoom state
           updateStateAtom({ pan, zoom });
           isPanning.current = false;
           touchIdentifier.current = null;

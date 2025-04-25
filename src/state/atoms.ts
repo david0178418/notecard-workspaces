@@ -321,21 +321,23 @@ export const deleteWorkspaceAtom = atom(
   null,
   (_get, set, workspaceId: string) => {
     set(appStateAtom, (prev) => {
-      if (!prev.workspaces[workspaceId]) return prev; // Doesn't exist
+      if (!prev.workspaces[workspaceId]) return prev;
       const workspaceKeys = Object.keys(prev.workspaces);
-      if (workspaceKeys.length <= 1) return prev; // Don't delete the last one
+      if (workspaceKeys.length <= 1) return prev;
 
       const { [workspaceId]: _, ...remainingWorkspaces } = prev.workspaces;
-      // Explicitly type the final ID variable
       let finalCurrentId: string | null = prev.currentWorkspaceId;
 
       if (finalCurrentId === workspaceId) {
-        // If deleting the current one, switch to the first remaining one
         const remainingKeys = Object.keys(remainingWorkspaces);
-        finalCurrentId = remainingKeys[0] ?? null;
+        if (remainingKeys.length > 0) {
+          // @ts-expect-error - TS struggles to infer remainingKeys[0] is non-undefined here
+          finalCurrentId = remainingKeys[0];
+        } else {
+          finalCurrentId = null;
+        }
       }
 
-      // The type of finalCurrentId is now guaranteed to be string | null
       return {
         ...prev,
         workspaces: remainingWorkspaces,

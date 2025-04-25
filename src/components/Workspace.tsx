@@ -39,9 +39,7 @@ function Workspace() {
     // Observe size changes
     const resizeObserver = new ResizeObserver((entries) => {
       for (let entry of entries) {
-        // Use contentRect for more accurate dimensions
         const { width, height } = entry.contentRect;
-        console.log(`[Workspace] Resized to ${width}x${height}`); // LOG
         setViewportSize({ width, height });
       }
     });
@@ -71,8 +69,6 @@ function Workspace() {
       // Calculate click position in workspace coordinates
       const workspaceX = (clientX - pan.x) / zoom;
       const workspaceY = (clientY - pan.y) / zoom;
-
-      console.log(`[Workspace] Double-click at viewport (${clientX},${clientY}), workspace (${workspaceX},${workspaceY}). Adding card.`);
 
       // Add a new card at the calculated position
       addCard({ text: '', position: { x: workspaceX, y: workspaceY } });

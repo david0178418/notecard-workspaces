@@ -38,7 +38,6 @@ function SidebarContent() {
     const cardCenterX = card.position.x + cardWidth / 2;
     const cardCenterY = card.position.y + cardHeight / 2;
 
-    console.log(`[Sidebar] Centering on card ${cardId} at`, { x: cardCenterX, y: cardCenterY });
     centerOnPoint({ x: cardCenterX, y: cardCenterY });
 
     setIsSidebarOpen(false);

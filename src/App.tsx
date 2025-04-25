@@ -39,14 +39,11 @@ function App() {
   };
 
   const handleAddCardClick = useCallback(() => {
-    // Calculate center of the viewport in workspace coordinates
     const centerX = (viewportSize.width / 2 - viewState.pan.x) / viewState.zoom;
     const centerY = (viewportSize.height / 2 - viewState.pan.y) / viewState.zoom;
 
-    console.log(`[App] FAB adding card at workspace coords:`, { x: centerX, y: centerY }); // LOG
-
     addCard({ text: '', position: { x: centerX, y: centerY } });
-  }, [addCard, viewState, viewportSize]); // Add dependencies
+  }, [addCard, viewState, viewportSize]);
 
   return (
     // Main container for positioning
