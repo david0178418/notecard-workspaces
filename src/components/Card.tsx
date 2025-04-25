@@ -34,6 +34,8 @@ function Card({ cardId }: CardProps) {
   // Refs for resizing
   const resizeStartPointer = useRef<Point>({ x: 0, y: 0 });
   const resizeStartSize = useRef<CardSize | null>(null);
+  const typographyRef = useRef<HTMLParagraphElement>(null); // Ref for Typography
+  const sizerRef = useRef<HTMLDivElement>(null); // <-- Ref for sizer element
 
   // Update local edit text if card data changes externally
   useEffect(() => {
@@ -138,22 +140,41 @@ function Card({ cardId }: CardProps) {
   }, [cardData?.size]);
 
   const handleResize = useCallback((clientX: number, clientY: number) => {
-    if (!isResizing || !resizeStartSize.current) return;
+    if (!isResizing || !resizeStartSize.current || !sizerRef.current || !cardData) return;
 
     const deltaX = clientX - resizeStartPointer.current.x;
     const deltaY = clientY - resizeStartPointer.current.y;
 
-    // Calculate new dimensions based on delta, accounting for zoom
     const newWidth = resizeStartSize.current.width + deltaX / zoom;
     const newHeight = resizeStartSize.current.height + deltaY / zoom;
 
-    // Enforce minimum dimensions
     const clampedWidth = Math.max(MIN_CARD_WIDTH, newWidth);
-    const clampedHeight = Math.max(MIN_CARD_HEIGHT, newHeight);
+    const userClampedHeight = Math.max(MIN_CARD_HEIGHT, newHeight);
 
-    updateSize({ cardId, size: { width: clampedWidth, height: clampedHeight } });
+    // --- Calculate minimum height for text at the target width --- //
+    // Apply text and width to sizer
+    sizerRef.current.innerText = cardData.text;
+    sizerRef.current.style.width = `${clampedWidth}px`;
+    // Read scrollHeight AFTER updating width and text
+    const textScrollHeight = sizerRef.current.scrollHeight;
+    const verticalPadding = 16 + 8; // Keep consistent padding calculation
+    const minHeightForText = textScrollHeight + verticalPadding;
+    // -------------------------------------------------------------- //
 
-  }, [cardId, isResizing, updateSize, zoom]);
+    // Final height is the max of user resize, min card height, and min text height
+    const finalHeight = Math.max(userClampedHeight, minHeightForText, MIN_CARD_HEIGHT);
+
+    updateSize({ cardId, size: { width: clampedWidth, height: finalHeight } });
+
+  }, [
+      cardId,
+      isResizing,
+      updateSize,
+      zoom,
+      cardData?.text, // Need text for sizer
+      // resizeStartSize.current is used but it's a ref, no need in deps
+      // resizeStartPointer.current is used but it's a ref, no need in deps
+    ]);
 
   const endResize = useCallback(() => {
     if (isResizing) {
@@ -271,6 +292,27 @@ function Card({ cardId }: CardProps) {
     }
   }, [isDraggingState, isResizing, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
+  // Effect to auto-adjust height based on text content
+  useEffect(() => {
+    // Only run if not editing and refs/data are available
+    if (!isEditing && typographyRef.current && cardData?.size) {
+      const currentHeight = cardData.size.height;
+      const scrollHeight = typographyRef.current.scrollHeight;
+      // Get padding from CardContent (approximate, ideally calculate precisely)
+      const verticalPadding = 16 + 8; // Approx. top/bottom padding in CardContent
+      const requiredHeight = scrollHeight + verticalPadding;
+      const heightDifference = requiredHeight - currentHeight;
+
+      // Update height if scrollHeight (plus padding) is significantly larger
+      // Add a buffer (e.g., 5px) to prevent minor fluctuations causing loops
+      if (heightDifference > 5) {
+        console.log(`[Card ${cardId}] Auto-adjusting height from ${currentHeight} to ${requiredHeight}`); // LOG
+        updateSize({ cardId, size: { width: cardData.size.width, height: requiredHeight } });
+      }
+    }
+    // Depend on text content and width (which affects scrollHeight)
+  }, [cardData?.text, cardData?.size?.width, cardData?.size?.height, isEditing, cardId, updateSize]);
+
   // --- Deletion --- //
   const handleDelete = useCallback(() => {
     // Optional: Add confirmation dialog later
@@ -302,6 +344,24 @@ function Card({ cardId }: CardProps) {
     isDraggingState,
     isResizing,
   ]);
+
+  // Define sizer styles (mirror Typography styles)
+  const sizerStyles: React.CSSProperties = {
+    position: 'absolute',
+    left: -9999,
+    top: -9999,
+    // Match Typography styles crucial for height calculation
+    fontSize: '0.875rem', // From theme.typography.body2.fontSize
+    lineHeight: 1.43, // From theme.typography.body2.lineHeight
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif', // From theme.typography.body2.fontFamily
+    fontWeight: 400, // From theme.typography.body2.fontWeight
+    letterSpacing: '0.01071em', // From theme.typography.body2.letterSpacing
+    whiteSpace: 'pre-wrap',
+    padding: '0', // Assuming no padding affects scrollHeight directly
+    margin: '0', // Assuming no margin affects scrollHeight directly
+    boxSizing: 'border-box',
+    visibility: 'hidden', // Ensure it's not visible but measurable
+  };
 
   return (
     <MuiCard
@@ -355,6 +415,7 @@ function Card({ cardId }: CardProps) {
           />
         ) : (
           <Typography
+            ref={typographyRef}
             variant="body2"
             sx={{
               whiteSpace: 'pre-wrap',
@@ -405,6 +466,9 @@ function Card({ cardId }: CardProps) {
       >
         <ResizeIcon fontSize="small" sx={{ transform: 'rotate(90deg)' }}/>
       </Box>
+
+      {/* Hidden Sizer Element */}
+      <div ref={sizerRef} style={sizerStyles}></div>
     </MuiCard>
   );
 }
