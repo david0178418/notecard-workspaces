@@ -128,16 +128,12 @@ export const updateViewStateAtom = atom(
 // Action to add a new card to the current workspace
 export const addCardAtom = atom(
   null,
-  (get, set, newCardData: Pick<CardData, 'text'>) => {
+  (get, set, newCardData: Pick<CardData, 'text' | 'position'>) => {
     const currentId = get(currentWorkspaceIdAtom);
     if (!currentId) return;
-    const viewState = get(currentViewStateAtom);
-    const positionX = (-viewState.pan.x / viewState.zoom) + 50 / viewState.zoom;
-    const positionY = (-viewState.pan.y / viewState.zoom) + 50 / viewState.zoom;
 
     const newCard: CardData = {
-      text: newCardData.text,
-      position: { x: positionX, y: positionY },
+      ...newCardData,
       size: { width: DEFAULT_CARD_WIDTH, height: DEFAULT_CARD_HEIGHT },
       id: nanoid(),
     };

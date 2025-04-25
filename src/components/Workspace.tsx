@@ -1,10 +1,11 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { Box } from '@mui/material';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
   currentCardsAtom,
   currentViewStateAtom,
   viewportSizeAtom,
+  addCardAtom,
 } from '../state/atoms';
 import { usePanZoom } from '../hooks/usePanZoom';
 import Card from './Card'; // Import the Card component
@@ -15,7 +16,9 @@ function Workspace() {
   // Get state from Jotai
   const cards = useAtomValue(currentCardsAtom);
   const initialViewState = useAtomValue(currentViewStateAtom);
+  const viewState = useAtomValue(currentViewStateAtom); // Also get current view state for coords
   const setViewportSize = useSetAtom(viewportSizeAtom); // Get setter for viewport size
+  const addCard = useSetAtom(addCardAtom); // Get addCard setter
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -51,6 +54,32 @@ function Workspace() {
     };
   }, [setViewportSize]); // Dependency on the atom setter
 
+  // Handler for double-clicking the workspace background
+  const handleDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      // Remove the target check - allow clicks on inner transformed box too
+      // if (event.target !== containerRef.current) {
+      //   console.log("[Workspace] Double-click ignored (not on background)");
+      //   return;
+      // }
+
+      // Card's onDoubleClick handler should prevent this from firing if clicked on a card
+
+      const { clientX, clientY } = event;
+      const { pan, zoom } = viewState; // Use current view state
+
+      // Calculate click position in workspace coordinates
+      const workspaceX = (clientX - pan.x) / zoom;
+      const workspaceY = (clientY - pan.y) / zoom;
+
+      console.log(`[Workspace] Double-click at viewport (${clientX},${clientY}), workspace (${workspaceX},${workspaceY}). Adding card.`);
+
+      // Add a new card at the calculated position
+      addCard({ text: '', position: { x: workspaceX, y: workspaceY } });
+    },
+    [addCard, viewState] // Include dependencies
+  );
+
   return (
     <Box
       sx={{
@@ -60,6 +89,7 @@ function Workspace() {
         bgcolor: 'background.default'
       }}
       {...containerProps}
+      onDoubleClick={handleDoubleClick}
     >
       {/* Inner content wrapper */}
       <Box
