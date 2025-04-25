@@ -1,0 +1,223 @@
+import { atomWithStorage, createJSONStorage } from 'jotai/utils';
+import { atom } from 'jotai';
+import { nanoid } from 'nanoid'; // Using nanoid for unique IDs
+// Define the initial state conforming to the AppState interface
+const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace
+const initialAppState = {
+    workspaces: {
+        [initialWorkspaceId]: {
+            id: initialWorkspaceId,
+            name: 'Default Workspace',
+            cards: {},
+            viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
+        },
+    },
+    currentWorkspaceId: initialWorkspaceId,
+};
+// Create a storage instance for localStorage
+// Using createJSONStorage ensures proper serialization/deserialization
+// Note: atomWithStorage uses JSON.stringify/parse by default if storage
+// is localStorage/sessionStorage and no storage object is provided,
+// but explicitly providing it makes the type handling more robust.
+const storage = createJSONStorage(() => localStorage);
+/**
+ * The main atom holding the entire application state.
+ * It automatically persists to localStorage under the key 'notecardAppState'.
+ */
+export const appStateAtom = atomWithStorage('notecardAppState', initialAppState, // Use the state with a default workspace
+storage);
+// --- Derived Atoms --- //
+export const currentWorkspaceIdAtom = atom((get) => get(appStateAtom).currentWorkspaceId);
+export const workspacesAtom = atom((get) => get(appStateAtom).workspaces);
+export const currentWorkspaceAtom = atom((get) => {
+    const state = get(appStateAtom);
+    if (!state.currentWorkspaceId)
+        return null;
+    return state.workspaces[state.currentWorkspaceId] ?? null;
+});
+export const currentCardsAtom = atom((get) => {
+    const currentWorkspace = get(currentWorkspaceAtom);
+    return currentWorkspace?.cards ?? {};
+});
+export const currentViewStateAtom = atom((get) => {
+    const currentWorkspace = get(currentWorkspaceAtom);
+    // Provide a default view state if somehow the workspace doesn't exist
+    return currentWorkspace?.viewState ?? { pan: { x: 0, y: 0 }, zoom: 1 };
+});
+// --- Action Atoms / Functions --- //
+// Note: We use atom(null, (get, set, ...) => ...) for actions that modify state.
+// Action to update the current workspace's view state
+export const updateViewStateAtom = atom(null, (get, set, newViewState) => {
+    const currentId = get(currentWorkspaceIdAtom);
+    if (!currentId)
+        return;
+    set(appStateAtom, (prev) => {
+        const currentWorkspace = prev.workspaces[currentId];
+        if (!currentWorkspace)
+            return prev; // Should not happen if currentId is set
+        return {
+            ...prev,
+            workspaces: {
+                ...prev.workspaces,
+                [currentId]: {
+                    ...currentWorkspace,
+                    viewState: { ...currentWorkspace.viewState, ...newViewState },
+                },
+            },
+        };
+    });
+});
+// Action to add a new card to the current workspace
+export const addCardAtom = atom(null, (get, set, newCardData) => {
+    const currentId = get(currentWorkspaceIdAtom);
+    if (!currentId)
+        return;
+    const newCard = {
+        ...newCardData,
+        id: nanoid(), // Generate unique ID
+    };
+    set(appStateAtom, (prev) => {
+        const currentWorkspace = prev.workspaces[currentId];
+        if (!currentWorkspace)
+            return prev;
+        return {
+            ...prev,
+            workspaces: {
+                ...prev.workspaces,
+                [currentId]: {
+                    ...currentWorkspace,
+                    cards: {
+                        ...currentWorkspace.cards,
+                        [newCard.id]: newCard,
+                    },
+                },
+            },
+        };
+    });
+});
+// Action to update a specific card's position
+export const updateCardPositionAtom = atom(null, (get, set, { cardId, position }) => {
+    const currentId = get(currentWorkspaceIdAtom);
+    if (!currentId)
+        return;
+    set(appStateAtom, (prev) => {
+        const currentWorkspace = prev.workspaces[currentId];
+        if (!currentWorkspace?.cards[cardId])
+            return prev; // Card doesn't exist
+        return {
+            ...prev,
+            workspaces: {
+                ...prev.workspaces,
+                [currentId]: {
+                    ...currentWorkspace,
+                    cards: {
+                        ...currentWorkspace.cards,
+                        [cardId]: { ...currentWorkspace.cards[cardId], position },
+                    },
+                },
+            },
+        };
+    });
+});
+// Action to update a specific card's text
+export const updateCardTextAtom = atom(null, (get, set, { cardId, text }) => {
+    const currentId = get(currentWorkspaceIdAtom);
+    if (!currentId)
+        return;
+    set(appStateAtom, (prev) => {
+        const currentWorkspace = prev.workspaces[currentId];
+        if (!currentWorkspace?.cards[cardId])
+            return prev;
+        return {
+            ...prev,
+            workspaces: {
+                ...prev.workspaces,
+                [currentId]: {
+                    ...currentWorkspace,
+                    cards: {
+                        ...currentWorkspace.cards,
+                        [cardId]: { ...currentWorkspace.cards[cardId], text },
+                    },
+                },
+            },
+        };
+    });
+});
+// Action to delete a specific card
+export const deleteCardAtom = atom(null, (get, set, cardId) => {
+    const currentId = get(currentWorkspaceIdAtom);
+    if (!currentId)
+        return;
+    set(appStateAtom, (prev) => {
+        const currentWorkspace = prev.workspaces[currentId];
+        if (!currentWorkspace?.cards[cardId])
+            return prev;
+        const { [cardId]: _, ...remainingCards } = currentWorkspace.cards;
+        return {
+            ...prev,
+            workspaces: {
+                ...prev.workspaces,
+                [currentId]: {
+                    ...currentWorkspace,
+                    cards: remainingCards,
+                },
+            },
+        };
+    });
+});
+// Action to create a new workspace
+export const createWorkspaceAtom = atom(null, (get, set, name) => {
+    const newId = nanoid();
+    const newWorkspace = {
+        id: newId,
+        name,
+        cards: {},
+        viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
+    };
+    set(appStateAtom, (prev) => ({
+        ...prev,
+        workspaces: {
+            ...prev.workspaces,
+            [newId]: newWorkspace,
+        },
+        currentWorkspaceId: newId, // Switch to the new workspace
+    }));
+});
+// Action to switch the current workspace
+export const switchWorkspaceAtom = atom(null, (get, set, workspaceId) => {
+    set(appStateAtom, (prev) => {
+        if (!prev.workspaces[workspaceId])
+            return prev; // Don't switch if ID is invalid
+        return {
+            ...prev,
+            currentWorkspaceId: workspaceId,
+        };
+    });
+});
+// Action to delete a workspace
+export const deleteWorkspaceAtom = atom(null, (get, set, workspaceId) => {
+    set(appStateAtom, (prev) => {
+        if (!prev.workspaces[workspaceId])
+            return prev; // Doesn't exist
+        const workspaceKeys = Object.keys(prev.workspaces);
+        if (workspaceKeys.length <= 1)
+            return prev; // Don't delete the last one
+        const { [workspaceId]: _, ...remainingWorkspaces } = prev.workspaces;
+        // Explicitly type the final ID variable
+        let finalCurrentId = prev.currentWorkspaceId;
+        if (finalCurrentId === workspaceId) {
+            // If deleting the current one, switch to the first remaining one
+            const remainingKeys = Object.keys(remainingWorkspaces);
+            finalCurrentId = remainingKeys.length > 0 ? remainingKeys[0] : null;
+        }
+        // The type of finalCurrentId is now guaranteed to be string | null
+        return {
+            ...prev,
+            workspaces: remainingWorkspaces,
+            currentWorkspaceId: finalCurrentId,
+        };
+    });
+});
+// Example of a derived atom (we will add more later as needed)
+// import { atom } from 'jotai';
+// export const currentWorkspaceIdAtom = atom((get) => get(appStateAtom).currentWorkspaceId); 

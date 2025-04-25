@@ -1,0 +1,29 @@
+{
+  "name": "cards",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check": "bun tsc",
+    "bundle": "bun build --target=browser --sourcemap=linked --minify --outdir=dist ./index.html",
+    "dev": "bun --hot index.html"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^7.0.2",
+    "@mui/material": "^7.0.2",
+    "jotai": "^2.12.3",
+    "nanoid": "^5.1.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
