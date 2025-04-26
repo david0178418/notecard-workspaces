@@ -1,9 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   Box, List, ListItem, ListItemButton, ListItemText, Divider, Button, Typography,
-  Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel
 } from '@mui/material';
 import { useAtomValue, useSetAtom, useAtom } from 'jotai';
+import { usePushToastMsg } from '../state/atoms';
 import {
   currentCardsAtom,
   currentWorkspaceIdAtom,
@@ -11,31 +11,30 @@ import {
   centerOnPointAtom,
   sidebarOpenAtom,
   appStateAtom,
-  usePushToastMsg,
 } from '../state/atoms';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
 import type { WorkspaceData } from '../types';
+import ExportDialog from './ExportDialog';
+import ImportDialog from './ImportDialog';
 
 function SidebarContent() {
   const cards = useAtomValue(currentCardsAtom);
   const createWorkspace = useSetAtom(createWorkspaceAtom);
   const centerOnPoint = useSetAtom(centerOnPointAtom);
   const setIsSidebarOpen = useSetAtom(sidebarOpenAtom);
+  const [appState] = useAtom(appStateAtom);
   const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
-  const [appState, setAppState] = useAtom(appStateAtom);
+  const pushToastMsg = usePushToastMsg();
   const currentWorkspaceName = currentWorkspaceId ? appState.workspaces[currentWorkspaceId]?.name : '-';
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pushToastMsg = usePushToastMsg();
 
-  // State for Export Dialog
+  // State for Export Dialog visibility
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
-  const [exportSelection, setExportSelection] = useState<Record<string, boolean>>({});
 
-  // State for Import Dialog
+  // State for Import Dialog visibility and data
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importedWorkspaces, setImportedWorkspaces] = useState<Record<string, WorkspaceData>>({});
-  const [importSelection, setImportSelection] = useState<Record<string, boolean>>({});
 
   const handleNewWorkspace = useCallback(() => {
     const name = prompt('Enter new workspace name:', 'New Workspace');
@@ -61,60 +60,17 @@ function SidebarContent() {
   }, [cards, centerOnPoint, setIsSidebarOpen]);
 
   // --- Export Logic ---
-
   const handleExportClick = useCallback(() => {
-    // Initialize selection state based on current workspaces
-    const initialSelection: Record<string, boolean> = {};
-    Object.keys(appState.workspaces).forEach(id => {
-      initialSelection[id] = true; // Default to selecting all
-    });
-    setExportSelection(initialSelection);
-    setIsExportDialogOpen(true); // Open the export dialog
-  }, [appState.workspaces]);
-
-  const handleExportSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setExportSelection(prev => ({
-      ...prev,
-      [event.target.name]: event.target.checked,
-    }));
+    setIsExportDialogOpen(true); // Just open the dialog
   }, []);
 
-  const handleConfirmExport = useCallback(() => {
-    const workspacesToExport: Record<string, WorkspaceData> = {};
-    Object.keys(exportSelection).forEach(id => {
-      if (exportSelection[id] && appState.workspaces[id]) {
-        workspacesToExport[id] = appState.workspaces[id];
-      }
-    });
-
-    if (Object.keys(workspacesToExport).length === 0) {
-      pushToastMsg("Please select at least one workspace to export.");
-      return;
-    }
-
-    const jsonString = JSON.stringify(workspacesToExport, null, 2); // Only export selected workspaces
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    const dateStamp = new Date().toISOString().slice(0, 10);
-    link.download = `notecards_workspaces_${dateStamp}.json`; // Changed filename
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    console.log('Export initiated for selected workspaces');
-    setIsExportDialogOpen(false); // Close dialog
-  }, [appState.workspaces, exportSelection, pushToastMsg]);
-
-  const handleCancelExport = useCallback(() => {
+  const handleCloseExportDialog = useCallback(() => {
     setIsExportDialogOpen(false);
   }, []);
 
   // --- Import Logic ---
-
   const handleImportClick = useCallback(() => {
-    fileInputRef.current?.click(); // Trigger file input
+    fileInputRef.current?.click();
   }, []);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,34 +83,28 @@ function SidebarContent() {
         const jsonString = e.target?.result as string;
         const parsedData = JSON.parse(jsonString);
 
-        // Basic validation: Check if it's an object (likely a record of workspaces)
         if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData)) {
-          // TODO: Add more robust validation for each workspace structure
           const validWorkspaces: Record<string, WorkspaceData> = {};
-          const initialSelection: Record<string, boolean> = {};
           let hasValidWorkspace = false;
-
           for (const id in parsedData) {
-              // Rudimentary check for WorkspaceData structure
-              if (parsedData[id] && typeof parsedData[id] === 'object' && 'name' in parsedData[id] && 'cards' in parsedData[id] && 'viewState' in parsedData[id]) {
-                validWorkspaces[id] = parsedData[id] as WorkspaceData;
-                initialSelection[id] = true; // Default select valid ones
-                hasValidWorkspace = true;
-              } else {
-                  console.warn(`Skipping invalid workspace data with id: ${id}`);
-              }
+            const ws = parsedData[id];
+             // Check structure (can be improved with more robust validation)
+            if (ws && typeof ws === 'object' && 'name' in ws && 'cards' in ws && 'viewState' in ws) {
+              validWorkspaces[id] = ws as WorkspaceData;
+              hasValidWorkspace = true;
+            } else {
+              console.warn(`Skipping invalid workspace data with id: ${id}`);
+            }
           }
 
           if (!hasValidWorkspace) {
-              throw new Error('No valid workspace data found in the file.');
+            throw new Error('No valid workspace data found in the file.');
           }
 
           setImportedWorkspaces(validWorkspaces);
-          setImportSelection(initialSelection);
           setIsImportDialogOpen(true); // Open import selection dialog
-
         } else {
-          throw new Error('Invalid file format. Expected a JSON object containing workspace data.');
+          throw new Error('Invalid file format. Expected JSON object of workspaces.');
         }
       } catch (error) {
         console.error('Failed to parse or validate import file:', error);
@@ -173,74 +123,15 @@ function SidebarContent() {
       }
     };
     reader.readAsText(file);
-  }, [setAppState, pushToastMsg]);
+  }, [pushToastMsg]); // Removed setAppState, handled in ImportDialog
 
-  const handleImportSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setImportSelection(prev => ({
-      ...prev,
-      [event.target.name]: event.target.checked,
-    }));
-  }, []);
-
-  const handleConfirmImport = useCallback(() => {
-    const workspacesToImport: Record<string, WorkspaceData> = {};
-    Object.keys(importSelection).forEach(id => {
-      if (importSelection[id] && importedWorkspaces[id]) {
-        workspacesToImport[id] = importedWorkspaces[id];
-      }
-    });
-
-     if (Object.keys(workspacesToImport).length === 0) {
-      pushToastMsg("Please select at least one workspace to import.");
-      return;
-    }
-
-    // Merge selected workspaces into the existing state
-    setAppState(prev => {
-        const newWorkspaces = { ...prev.workspaces };
-        let conflicts = false;
-        for (const id in workspacesToImport) {
-            const importedWs = workspacesToImport[id];
-            // Ensure importedWs is not undefined before proceeding (shouldn't happen based on previous logic, but good for type safety)
-            if (!importedWs) continue;
-
-            const existingWs = newWorkspaces[id];
-            if (existingWs) {
-                // Simple conflict handling: Overwrite existing workspace with the same ID
-                console.warn(`Workspace ID conflict: Overwriting existing workspace "${existingWs.name}" with imported workspace "${importedWs.name}" (ID: ${id})`);
-                conflicts = true;
-            }
-            newWorkspaces[id] = importedWs; // Now TS knows importedWs is WorkspaceData
-        }
-        // Note: currentWorkspaceId is NOT updated here. The user stays in their current workspace.
-        if (conflicts) {
-            pushToastMsg("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.");
-        } else {
-            pushToastMsg("Selected workspaces imported successfully!");
-        }
-        return {
-            ...prev,
-            workspaces: newWorkspaces,
-        };
-    });
-
-
-    console.log('Import confirmed for selected workspaces');
-    setIsImportDialogOpen(false); // Close dialog
-    setImportedWorkspaces({}); // Clear imported data
-    setImportSelection({}); // Clear selection
-  }, [importedWorkspaces, importSelection, setAppState, pushToastMsg]);
-
-  const handleCancelImport = useCallback(() => {
+  const handleCloseImportDialog = useCallback(() => {
     setIsImportDialogOpen(false);
-    setImportedWorkspaces({});
-    setImportSelection({});
+    setImportedWorkspaces({}); // Clear data when closing
   }, []);
 
   const cardList = Object.values(cards);
-
-  const currentWorkspaceList = Object.values(appState.workspaces);
-  const importedWorkspaceList = Object.values(importedWorkspaces);
+  const existingWorkspaceIds = Object.keys(appState.workspaces);
 
   return (
     <Box sx={{ width: 250, display: 'flex', flexDirection: 'column', height: '100%' }} role="presentation">
@@ -290,65 +181,20 @@ function SidebarContent() {
         style={{ display: 'none' }}
       />
 
-      {/* Export Selection Dialog */}
-      <Dialog open={isExportDialogOpen} onClose={handleCancelExport}>
-        <DialogTitle>Select Workspaces to Export</DialogTitle>
-        <DialogContent>
-          <List>
-            {currentWorkspaceList.map((ws) => (
-              <ListItem key={ws.id} disablePadding>
-                 <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={!!exportSelection[ws.id]}
-                        onChange={handleExportSelectionChange}
-                        name={ws.id}
-                      />
-                    }
-                    label={ws.name}
-                  />
-              </ListItem>
-            ))}
-          </List>
-           {currentWorkspaceList.length === 0 && <Typography>No workspaces to export.</Typography>}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelExport}>Cancel</Button>
-          <Button onClick={handleConfirmExport} disabled={currentWorkspaceList.length === 0 || !Object.values(exportSelection).some(v => v)}>Export Selected</Button>
-        </DialogActions>
-      </Dialog>
+      {/* Export Dialog Component */}
+      <ExportDialog
+        open={isExportDialogOpen}
+        onClose={handleCloseExportDialog}
+        workspaces={appState.workspaces}
+      />
 
-      {/* Import Selection Dialog */}
-      <Dialog open={isImportDialogOpen} onClose={handleCancelImport}>
-        <DialogTitle>Select Workspaces to Import</DialogTitle>
-        <DialogContent>
-          <List>
-             {importedWorkspaceList.map((ws) => {
-                const existingWs = appState.workspaces[ws.id]; // Check if workspace exists
-                return (
-                  <ListItem key={ws.id} disablePadding>
-                    <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={!!importSelection[ws.id]}
-                            onChange={handleImportSelectionChange}
-                            name={ws.id}
-                          />
-                        }
-                        label={`${ws.name}${existingWs ? ' (Overwrite Existing)' : ''}`} // Use existingWs check
-                      />
-                  </ListItem>
-                );
-            })}
-          </List>
-          {importedWorkspaceList.length === 0 && <Typography>No valid workspaces found in the file.</Typography>}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelImport}>Cancel</Button>
-          <Button onClick={handleConfirmImport} disabled={importedWorkspaceList.length === 0 || !Object.values(importSelection).some(v => v)}>Import Selected</Button>
-        </DialogActions>
-      </Dialog>
-
+      {/* Import Dialog Component */}
+      <ImportDialog
+        open={isImportDialogOpen}
+        onClose={handleCloseImportDialog}
+        workspacesToImport={importedWorkspaces}
+        existingWorkspaceIds={existingWorkspaceIds}
+      />
     </Box>
   );
 }

@@ -1,10 +1,6 @@
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
-import { atom, useAtom, useSetAtom, useAtomValue, PrimitiveAtom } from 'jotai';
+import { atom, useSetAtom } from 'jotai';
 import type { AppState, WorkspaceData, CardData, Point, ViewState, CardSize, ToastMesssage } from '../types';
-import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../components/Card';
-
-const DEFAULT_CARD_WIDTH = 200;
-const DEFAULT_CARD_HEIGHT = 100;
 
 // Type for theme mode
 export type ThemeMode = 'light' | 'dark';
@@ -170,8 +166,8 @@ export const addCardAtom = atom(
 
     const newCard: CardData = {
       ...newCardData,
-      size: { width: DEFAULT_CARD_WIDTH, height: DEFAULT_CARD_HEIGHT },
-      id: crypto.randomUUID(), // Use crypto.randomUUID()
+      size: { width: 200, height: 100 },
+      id: crypto.randomUUID(),
     };
 
     // First, update the main state with the new card
@@ -292,6 +288,7 @@ export const deleteCardAtom = atom(
     const currentId = get(currentWorkspaceIdAtom);
     if (!currentId) return;
 
+    // Update the main state
     set(appStateAtom, (prev) => {
       const currentWorkspace = prev.workspaces[currentId];
       if (!currentWorkspace?.cards[cardId]) return prev;
@@ -309,6 +306,9 @@ export const deleteCardAtom = atom(
         },
       };
     });
+
+    // Also remove the card ID from the interaction order
+    set(interactionOrderAtom, (prevOrder) => prevOrder.filter(id => id !== cardId));
   }
 );
 

@@ -9982,6 +9982,155 @@ _**Assistant**_
 
 ---
 
+Okay, let's switch from `nanoid` to the native `crypto.randomUUID()` to reduce dependencies.
+
+**1. Find Usages**
+
+I'll first search for where `nanoid` is used. I expect it's mainly in `src/state/atoms.ts` for generating workspace and card IDs.
+
+---
+
+<details>
+            <summary>Grep search for "nanoid" • **7** files</summary>
+        
+| File | Line | Match |
+|------|------|-------|
+| `file:///home/davidg/Projects/cards/bun.lock` | L11 | `"nanoid": "^5.1.5",` |
+| `file:///home/davidg/Projects/cards/bun.lock` | L166 | `"nanoid": ["nanoid@5.1.5", "", { "bin": { "nanoid": "bin/nanoid.js" } }, "sha512-Ir/+ZpE9fDsNH0hQ3C68uyThDXzYcim2EqcZ8zn8Chtt1iylPT9xXJB0kPCnqzgcEGikO9RxSrh63MsmVCU7Fw=="],` |
+| `file:///home/davidg/Projects/cards/src/state/atoms.ts` | L3 | `import { nanoid } from 'nanoid'; // Using nanoid for unique IDs` |
+| `file:///home/davidg/Projects/cards/src/state/atoms.ts` | L26 | `const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace` |
+| `file:///home/davidg/Projects/cards/src/state/atoms.ts` | L174 | `id: nanoid(),` |
+| `file:///home/davidg/Projects/cards/src/state/atoms.ts` | L317 | `const newId = nanoid();` |
+| `file:///home/davidg/Projects/cards/README.md` | L23 | `*   **Unique IDs:** Nanoid` |
+| `file:///home/davidg/Projects/cards/package.json` | L24 | `"nanoid": "^5.1.5",` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1277 | `+ import { nanoid } from 'nanoid'; // Using nanoid for unique IDs` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1283 | `+ const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1363 | `+       id: nanoid(), // Generate unique ID` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1472 | `+   const newId = nanoid();` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1533 | `It seems I need to install `nanoid` first, as it's used for generating IDs in the state actions.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1538 | `bun add nanoid` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1544 | `installed nanoid@5.1.5 with binaries:` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1545 | `- nanoid` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L1553 | `Okay, `nanoid` is installed.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L2595 | `import { nanoid } from 'nanoid'; // Using nanoid for unique IDs` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L2617 | `id: nanoid(), // Generate unique ID` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L2629 | `import { nanoid } from 'nanoid'; // Using nanoid for unique IDs` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L3656 | `import { nanoid } from 'nanoid'; // Using nanoid for unique IDs` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L3672 | `-       id: nanoid(), // Generate unique ID` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L3676 | `+       id: nanoid(),` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L5470 | `id: nanoid(),` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L6067 | `const newId = nanoid();` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8998 | `+ *   **Unique IDs:** Nanoid` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9566 | `import { nanoid } from 'nanoid'; // Using nanoid for unique IDs` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9668 | `⟪ 125 characters skipped ⟫e based on the previous file read. The `nanoid` package is used instead for generating IDs.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9682 | `import { nanoid } from 'nanoid'; // Using nanoid for unique IDs` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9710 | `⟪ 130 characters skipped ⟫nstalled. The project continues to use `nanoid` for ID generation as originally intended.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9941 | `What is the reason for using nanoid? Why not just use a uuid?` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9951 | `That's a perfectly valid question! Both `nanoid` and standard UUIDs (like those generated by `crypto.randomUUID()` or the older `uuid` package) are excellent choices for generating unique identifiers. The choice often comes down to specific` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9953 | `Here are some common reasons why `nanoid` might be chosen over UUIDs:` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9955 | `1.  **Size/Compactness:** By default, `nanoid` generates shorter IDs (21 characters using its standard URL-friendly alphabet) compared to the standard 36-character UUID v4 string (`xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`). While storage spac` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9956 | `2.  **URL Friendliness:** The default alphabet used by `nanoid` (`A-Za-z0-9_-`) is URL-safe. Standard UUIDs include hyphens, which aren't inherently problematic but sometimes require encoding depending on the context.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9957 | `3.  **Performance (vs. `uuid` package):** Historically, `nanoid` often benchmarked faster than the JavaScript `uuid` package, especially for generating many IDs. However, this advantage is less significant now compared to the native `crypto.randomUUID()`.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9958 | `4.  **Customization:** `nanoid` offers easy customization of the ID length and the alphabet used, although this isn't utilized in the current project.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L9968 | ``nanoid` was likely chosen initially and fulfills the requirement for unique IDs perfectly well. While native `crypto.randomUUID()` is arguably a slightly better choice *if starting today* (mainly due to having no dependency), there's no compelling technical reason to switch *away* from `nanoid` now that it's integrated and working correctly. Both generate IDs with extremely low collision probabilities suitable for this application.` |
+| `file:///home/davidg/Projects/cards/package.json` | L24 | `"nanoid": "^5.1.5",` |
+| `file:///home/davidg/Projects/cards/src/state/atoms.ts` | L3 | `import { nanoid } from 'nanoid'; // Using nanoid for unique IDs` |
+| `file:///home/davidg/Projects/cards/src/state/atoms.ts` | L26 | `const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace` |
+| `file:///home/davidg/Projects/cards/src/state/atoms.ts` | L174 | `id: nanoid(),` |
+| `file:///home/davidg/Projects/cards/src/state/atoms.ts` | L317 | `const newId = nanoid();` |
+
+</details>
+
+---
+
+**2 & 3. Replace Usage and Remove Import**
+
+As expected, the usages are in `src/state/atoms.ts` for the initial workspace ID, new card IDs, and new workspace IDs. I'll replace these calls with `crypto.randomUUID()` and remove the import.
+
+---
+
+```diff
+  import { atom, useAtom, useSetAtom, useAtomValue, PrimitiveAtom } from 'jotai';
+  import type { AppState, WorkspaceData, CardData, Point, ViewState, CardSize, ToastMesssage } from '../types';
+- import { nanoid } from 'nanoid'; // Using nanoid for unique IDs
+  import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../components/Card';
+  
+  
+  // Define the initial state conforming to the AppState interface
+- const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace
++ const initialWorkspaceId = crypto.randomUUID(); // Use crypto.randomUUID()
+  const initialAppState: AppState = {
+    workspaces: {
+        ...newCardData,
+        size: { width: DEFAULT_CARD_WIDTH, height: DEFAULT_CARD_HEIGHT },
+-       id: nanoid(),
++       id: crypto.randomUUID(), // Use crypto.randomUUID()
+      };
+  
+  // Action to create a new workspace
+  export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
+-   const newId = nanoid();
++   const newId = crypto.randomUUID(); // Use crypto.randomUUID()
+    const newWorkspace: WorkspaceData = {
+      id: newId,
+```
+
+---
+
+**4. Uninstall Package**
+
+Now, I'll uninstall the `nanoid` package.
+
+---
+
+```bash
+bun remove nanoid
+```
+
+```
+    ~/Pr/cards    master !7 ?1  bun remove nanoid                                   ✔ 
+bun remove v1.2.10 (db2e7d7f)
+
+- nanoid
+1 package removed [3.00ms]
+    ~/Pr/cards    master !7 ?1                                                      ✔
+```
+
+---
+
+**5. Update README**
+
+Finally, I'll update the README to reflect the change from `nanoid` to native `crypto.randomUUID()`.
+
+---
+
+```diff
+  *   **State Management:** Jotai
+  *   **Notifications:** Notistack
+- *   **Unique IDs:** Nanoid
++ *   **Unique IDs:** Native `crypto.randomUUID()`
+  
+  ## Getting Started
+```
+
+---
+
+Okay, the switch is complete. I've replaced all uses of `nanoid()` with `crypto.randomUUID()`, removed the `nanoid` import and package, and updated the README.
+
+---
+
+_**User**_
+
+Let's do a cleanup pass.  Do any optimizations, reorganizations, etc you deem fit.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
 
 
 ---

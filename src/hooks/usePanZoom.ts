@@ -146,7 +146,6 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
           pan: { ...pan }, // Store initial pan/zoom at pinch start
           zoom: zoom,
         };
-        console.log("Pinch started", initialPinchState.current); // LOG
       }
       // --- Single Finger Pan Start ---
       else if (event.touches.length === 1 && !isPinching.current) {
@@ -232,8 +231,7 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
     (event: React.TouchEvent) => {
       // If pinch was active, finalize state update
       if (isPinching.current) {
-        console.log("Pinch ended, updating atom", { pan, zoom }); // LOG
-        updateStateAtom({ pan, zoom }); // Update global state
+        updateStateAtom({ pan, zoom });
         isPinching.current = false;
         initialPinchState.current = null;
         pinchTouches.current = null;
