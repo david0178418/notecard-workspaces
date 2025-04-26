@@ -168,9 +168,20 @@ export const addCardAtom = atom(
     const currentId = get(currentWorkspaceIdAtom);
     if (!currentId) return;
 
+    // Define default size here to use for offset calculation
+    const defaultWidth = 200;
+    const defaultHeight = 100;
+
+    // Adjust the position to center the card on the target point
+    const adjustedPosition = {
+      x: newCardData.position.x - defaultWidth / 2,
+      y: newCardData.position.y - defaultHeight / 2,
+    };
+
     const newCard: CardData = {
-      ...newCardData,
-      size: { width: 200, height: 100 },
+      text: newCardData.text, // Ensure text is included
+      position: adjustedPosition, // Use the adjusted position
+      size: { width: defaultWidth, height: defaultHeight },
       id: crypto.randomUUID(),
     };
 

@@ -11203,6 +11203,106 @@ _**Assistant**_
 
 ---
 
+Okay, I can add a simple CSS scale-in animation for the cards.
+
+**1. Define CSS Animation Keyframes**
+
+I'll add the `@keyframes` rule to `src/index.css`. If this file doesn't exist, I'll create it.
+
+---
+
+```diff
+    /* Example: override default body margin if needed beyond CssBaseline */
+  }
++ 
++ /* Add keyframes for card scale-in animation */
++ @keyframes scaleIn {
++   from {
++     transform: scale(0);
++     opacity: 0;
++   }
++   to {
++     transform: scale(1);
++     opacity: 1;
++   }
++ } 
+```
+
+---
+
+**2. Apply Animation to Card Component**
+
+Now, I'll modify `src/components/Card.tsx` to apply this `scaleIn` animation using the `sx` prop on the `MuiCard`. I'll set a short duration and timing function.
+
+---
+
+```diff
+          flexDirection: 'column',
+          willChange: 'transform, opacity',
++         animation: 'scaleIn 0.3s ease-out forwards',
++         transformOrigin: 'center center',
+        }}
+        style={dynamicStyles}
+```
+
+---
+
+Okay, the `scaleIn` keyframes have been added to `src/index.css`, and the `Card` component in `src/components/Card.tsx` now applies this animation via the `sx` prop.
+
+New cards should now appear with a brief scale-in animation.
+
+---
+
+_**User**_
+
+When creating a new card, create it at an offset of 50% of the card width and height to the left and up. 
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, I understand. You want new cards to appear such that the *center* of the new card is at the target location (double-click point or viewport center), rather than the top-left corner being at that location.
+
+To achieve this, I need to adjust the position calculation within the `addCardAtom` in `src/state/atoms.ts`. When a new card is created, I'll subtract half of the default card width from the target x-coordinate and half of the default card height from the target y-coordinate.
+
+---
+
+```diff
+      const currentId = get(currentWorkspaceIdAtom);
+      if (!currentId) return;
++ 
++     // Define default size here to use for offset calculation
++     const defaultWidth = 200;
++     const defaultHeight = 100;
++ 
++     // Adjust the position to center the card on the target point
++     const adjustedPosition = {
++       x: newCardData.position.x - defaultWidth / 2,
++       y: newCardData.position.y - defaultHeight / 2,
++     };
+  
+      const newCard: CardData = {
+-       ...newCardData,
+-       size: { width: 200, height: 100 },
++       text: newCardData.text, // Ensure text is included
++       position: adjustedPosition, // Use the adjusted position
++       size: { width: defaultWidth, height: defaultHeight },
+        id: crypto.randomUUID(),
+      };
+```
+
+---
+
+Done. I've modified the `addCardAtom` in `src/state/atoms.ts`. It now calculates an `adjustedPosition` by subtracting half the default width (100px) and half the default height (50px) from the position provided when the atom is called. This adjusted position is then used when creating the `newCard` object.
+
+New cards created via double-click or the FAB should now appear centered on the target point.
+
+---
+
 
 
 ---
