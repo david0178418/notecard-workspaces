@@ -1,7 +1,7 @@
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
-import { atom } from 'jotai';
-import type { AppState, WorkspaceData, CardData, Point, ViewState, CardSize } from '../types';
-import { nanoid } from 'nanoid'; // Using nanoid for unique IDs
+import { atom, useAtom, useSetAtom, useAtomValue, PrimitiveAtom } from 'jotai';
+import type { AppState, WorkspaceData, CardData, Point, ViewState, CardSize, ToastMesssage } from '../types';
+import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../components/Card';
 
 const DEFAULT_CARD_WIDTH = 200;
 const DEFAULT_CARD_HEIGHT = 100;
@@ -23,7 +23,7 @@ const getSystemTheme = (): ThemeMode => {
 };
 
 // Define the initial state conforming to the AppState interface
-const initialWorkspaceId = nanoid(); // Generate an ID for the initial workspace
+const initialWorkspaceId = crypto.randomUUID(); // Use crypto.randomUUID()
 const initialAppState: AppState = {
   workspaces: {
     [initialWorkspaceId]: {
@@ -103,6 +103,36 @@ export const interactionOrderAtom = atom<string[]>([]);
 // Atom to temporarily store the ID of the last created card for autofocus
 export const lastCreatedCardIdAtom = atom<string | null>(null);
 
+// --- Toast Notification Atoms --- //
+
+const toastQueueAtom = atom<ToastMesssage[]>([]);
+
+export const toastMsgAtom = atom(get => get(toastQueueAtom)[0] || null);
+
+const pushToastMsgAtom = atom(
+	null,
+	(get, set, message: ToastMesssage | string) => {
+		const addedMsg = (typeof message === 'string') ? { message } : message;
+		const tqa = get(toastQueueAtom);
+		set(toastQueueAtom, [ ...tqa, addedMsg ]);
+	},
+);
+
+export const clearCurrentToastMsgAtom = atom(
+	null,
+	(get, set) => {
+		const tqa = get(toastQueueAtom);
+		if (tqa.length > 0) {
+			const [, ...rest] = tqa; // Use destructuring to remove the first element
+			set(toastQueueAtom, rest);
+		}
+	},
+);
+
+export function usePushToastMsg() {
+	return useSetAtom(pushToastMsgAtom);
+}
+
 // --- Action Atoms / Functions --- //
 // Note: We use atom(null, (get, set, ...) => ...) for actions that modify state.
 
@@ -141,7 +171,7 @@ export const addCardAtom = atom(
     const newCard: CardData = {
       ...newCardData,
       size: { width: DEFAULT_CARD_WIDTH, height: DEFAULT_CARD_HEIGHT },
-      id: nanoid(),
+      id: crypto.randomUUID(), // Use crypto.randomUUID()
     };
 
     // First, update the main state with the new card
@@ -284,7 +314,7 @@ export const deleteCardAtom = atom(
 
 // Action to create a new workspace
 export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
-  const newId = nanoid();
+  const newId = crypto.randomUUID(); // Use crypto.randomUUID()
   const newWorkspace: WorkspaceData = {
     id: newId,
     name,

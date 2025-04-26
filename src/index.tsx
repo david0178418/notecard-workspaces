@@ -10,8 +10,8 @@ import { themeModeAtom } from './state/atoms'; // Import theme state atom
 import lightTheme from './theme/light'; // Import light theme
 import darkTheme from './theme/dark'; // Import dark theme
 
-// Notistack setup
-import { SnackbarProvider } from 'notistack';
+// Custom Toast Component
+import Toast from './components/Toast';
 
 // Main component to conditionally apply the theme
 function ThemedApp() {
@@ -23,6 +23,7 @@ function ThemedApp() {
       {/* CssBaseline kickstarts an elegant, consistent baseline to build upon. */}
       <CssBaseline />
       <App />
+      <Toast />
     </ThemeProvider>
   );
 }
@@ -36,9 +37,6 @@ const root = ReactDOM.createRoot(rootElement);
 
 root.render(
   <React.StrictMode>
-    {/* Wrap with SnackbarProvider */}
-    <SnackbarProvider maxSnack={3}>
-      <ThemedApp />
-    </SnackbarProvider>
+    <ThemedApp />
   </React.StrictMode>
 );

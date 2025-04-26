@@ -21,7 +21,7 @@ A simple web application for creating and organizing virtual note cards on an in
 *   **UI Library:** Material UI (MUI)
 *   **State Management:** Jotai
 *   **Notifications:** Notistack
-*   **Unique IDs:** Nanoid
+*   **Unique IDs:** Native `crypto.randomUUID()`
 
 ## Getting Started
 

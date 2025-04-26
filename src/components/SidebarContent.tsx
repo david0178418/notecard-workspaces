@@ -4,7 +4,6 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel
 } from '@mui/material';
 import { useAtomValue, useSetAtom, useAtom } from 'jotai';
-import { useSnackbar } from 'notistack';
 import {
   currentCardsAtom,
   currentWorkspaceIdAtom,
@@ -12,6 +11,7 @@ import {
   centerOnPointAtom,
   sidebarOpenAtom,
   appStateAtom,
+  usePushToastMsg,
 } from '../state/atoms';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
@@ -26,7 +26,7 @@ function SidebarContent() {
   const [appState, setAppState] = useAtom(appStateAtom);
   const currentWorkspaceName = currentWorkspaceId ? appState.workspaces[currentWorkspaceId]?.name : '-';
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { enqueueSnackbar } = useSnackbar();
+  const pushToastMsg = usePushToastMsg();
 
   // State for Export Dialog
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
@@ -88,7 +88,7 @@ function SidebarContent() {
     });
 
     if (Object.keys(workspacesToExport).length === 0) {
-      enqueueSnackbar("Please select at least one workspace to export.", { variant: 'warning' });
+      pushToastMsg("Please select at least one workspace to export.");
       return;
     }
 
@@ -105,7 +105,7 @@ function SidebarContent() {
     URL.revokeObjectURL(url);
     console.log('Export initiated for selected workspaces');
     setIsExportDialogOpen(false); // Close dialog
-  }, [appState.workspaces, exportSelection]);
+  }, [appState.workspaces, exportSelection, pushToastMsg]);
 
   const handleCancelExport = useCallback(() => {
     setIsExportDialogOpen(false);
@@ -158,7 +158,7 @@ function SidebarContent() {
         }
       } catch (error) {
         console.error('Failed to parse or validate import file:', error);
-        enqueueSnackbar(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`, { variant: 'error' });
+        pushToastMsg(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -167,13 +167,13 @@ function SidebarContent() {
     };
     reader.onerror = (_error) => {
       console.error('Failed to read file:', reader.error);
-      enqueueSnackbar(`Failed to read file: ${reader.error}`, { variant: 'error' });
+      pushToastMsg(`Failed to read file: ${reader.error}`);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     };
     reader.readAsText(file);
-  }, [setAppState]); // Keep setAppState dependency for the final import step
+  }, [setAppState, pushToastMsg]);
 
   const handleImportSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setImportSelection(prev => ({
@@ -191,7 +191,7 @@ function SidebarContent() {
     });
 
      if (Object.keys(workspacesToImport).length === 0) {
-      enqueueSnackbar("Please select at least one workspace to import.", { variant: 'warning' });
+      pushToastMsg("Please select at least one workspace to import.");
       return;
     }
 
@@ -214,9 +214,9 @@ function SidebarContent() {
         }
         // Note: currentWorkspaceId is NOT updated here. The user stays in their current workspace.
         if (conflicts) {
-            enqueueSnackbar("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.", { variant: 'warning' });
+            pushToastMsg("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.");
         } else {
-            enqueueSnackbar("Selected workspaces imported successfully!", { variant: 'success' });
+            pushToastMsg("Selected workspaces imported successfully!");
         }
         return {
             ...prev,
@@ -229,7 +229,7 @@ function SidebarContent() {
     setIsImportDialogOpen(false); // Close dialog
     setImportedWorkspaces({}); // Clear imported data
     setImportSelection({}); // Clear selection
-  }, [importedWorkspaces, importSelection, setAppState, enqueueSnackbar]); // Added enqueueSnackbar dependency
+  }, [importedWorkspaces, importSelection, setAppState, pushToastMsg]);
 
   const handleCancelImport = useCallback(() => {
     setIsImportDialogOpen(false);

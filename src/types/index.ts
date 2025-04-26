@@ -1,3 +1,5 @@
+import { ReactNode } from 'react';
+
 export interface Point {
   x: number;
   y: number;
@@ -32,4 +34,15 @@ export interface WorkspaceData {
 export interface AppState {
   workspaces: Record<string, WorkspaceData>; // Using Record for easy ID lookup
   currentWorkspaceId: string | null;
+}
+
+export interface CardDragItem {
+    id: string;
+    type: 'CARD';
+}
+
+export interface ToastMesssage {
+	message: ReactNode;
+	delay?: number;
+	onClose?(): void;
 } 
