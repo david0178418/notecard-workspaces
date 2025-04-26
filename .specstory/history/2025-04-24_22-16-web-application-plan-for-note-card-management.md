@@ -10131,6 +10131,756 @@ _**Assistant**_
 
 ---
 
+Okay, let's perform a cleanup pass. I'll review the code for potential improvements in structure, readability, and minor optimizations.
+
+**1. Reviewing `src/state/atoms.ts`**
+
+*   **Clarity:** The structure is generally good, separating derived atoms from action atoms.
+*   **Efficiency:**
+    *   The action atoms update the main `appStateAtom`, which is efficient for Jotai.
+    *   `deleteCardAtom`: It removes the card from the main state but doesn't update `interactionOrderAtom`. If a deleted card ID remains in the interaction order, it's harmless but slightly inefficient. Let's update `deleteCardAtom` to also remove the ID from `interactionOrderAtom`.
+    *   `deleteWorkspaceAtom`: Similar to `deleteCardAtom`, when a workspace is deleted, the `interactionOrderAtom` might contain card IDs from that deleted workspace. We should ideally clear those out. However, `interactionOrderAtom` isn't tied to a specific workspace currently; it seems to be global. If we want to maintain Z-index consistency *within* a workspace only, `interactionOrderAtom` should probably be part of `WorkspaceData`. Let's keep it global for now but update `deleteCardAtom`.
+
+Updating `deleteCardAtom` in `src/state/atoms.ts`:
+
+---
+
+```diff
+      if (!currentId) return;
+  
++     // Update the main state
+      set(appStateAtom, (prev) => {
+        const currentWorkspace = prev.workspaces[currentId];
+        };
+      });
++ 
++     // Also remove the card ID from the interaction order
++     set(interactionOrderAtom, (prevOrder) => prevOrder.filter(id => id !== cardId));
+    }
+  );
+```
+
+---
+
+**2. Reviewing Hooks (`usePanZoom.ts`, `useDraggable.ts`, `useResizable.ts`)**
+
+*   `usePanZoom.ts`:
+    *   Contains `console.log` calls related to pinch gestures. These should be removed.
+    *   The dependencies for `handleTouchMove` are empty (`[]`), relying on closures and refs. This is okay, but explicitly including state variables like `pan` and `zoom` if they are used in calculations within the callback (even indirectly via refs like `initialPinchState`) can sometimes help prevent stale closure issues, although it might cause more re-renders of the callback itself. Given the logic seems correct and relies on `initialPinchState.current`, let's leave the deps as `[]` but remove the logs.
+*   `useDraggable.ts`, `useResizable.ts`: Seem clean after the recent refactor. The use of `requestAnimationFrame` in `useResizable` is a good optimization.
+
+Removing logs from `usePanZoom.ts`:
+
+---
+
+```diff
+            zoom: zoom,
+          };
+-         console.log("Pinch started", initialPinchState.current); // LOG
+        }
+        // --- Single Finger Pan Start ---
+        // If pinch was active, finalize state update
+        if (isPinching.current) {
+-         console.log("Pinch ended, updating atom", { pan, zoom }); // LOG
+-         updateStateAtom({ pan, zoom }); // Update global state
++         updateStateAtom({ pan, zoom });
+          isPinching.current = false;
+          initialPinchState.current = null;
+```
+
+---
+
+**3. Reviewing Components**
+
+*   `SidebarContent.tsx`: Handles import/export logic and dialogs.
+    *   The component is getting quite large. Extracting the dialogs (Export & Import) into their own components could improve readability. Let's do that.
+
+Creating `src/components/ExportDialog.tsx`:
+
+---
+
+```diff
+- 
++ import React, { useState, useEffect, useCallback } from 'react';
++ import {
++   Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel, Button, List, ListItem, Typography
++ } from '@mui/material';
++ import type { WorkspaceData } from '../types';
++ 
++ interface ExportDialogProps {
++   open: boolean;
++   onClose: () => void;
++   workspaces: Record<string, WorkspaceData>;
++ }
++ 
++ function ExportDialog({ open, onClose, workspaces }: ExportDialogProps) {
++   const [selection, setSelection] = useState<Record<string, boolean>>({});
++   const workspaceList = Object.values(workspaces);
++ 
++   // Initialize selection when dialog opens or workspaces change
++   useEffect(() => {
++     if (open) {
++       const initialSelection: Record<string, boolean> = {};
++       workspaceList.forEach(ws => {
++         initialSelection[ws.id] = true; // Default select all
++       });
++       setSelection(initialSelection);
++     }
++   }, [open, workspaceList]); // Rerun if list changes while open (unlikely but safe)
++ 
++   const handleSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
++     setSelection(prev => ({
++       ...prev,
++       [event.target.name]: event.target.checked,
++     }));
++   }, []);
++ 
++   const handleConfirmExport = useCallback(() => {
++     const workspacesToExport: Record<string, WorkspaceData> = {};
++     Object.keys(selection).forEach(id => {
++       if (selection[id] && workspaces[id]) {
++         workspacesToExport[id] = workspaces[id];
++       }
++     });
++ 
++     if (Object.keys(workspacesToExport).length === 0) {
++       // Consider using toast here if available globally or passed as prop
++       alert("Please select at least one workspace to export.");
++       return;
++     }
++ 
++     const jsonString = JSON.stringify(workspacesToExport, null, 2);
++     const blob = new Blob([jsonString], { type: 'application/json' });
++     const url = URL.createObjectURL(blob);
++     const link = document.createElement('a');
++     link.href = url;
++     const dateStamp = new Date().toISOString().slice(0, 10);
++     link.download = `notecards_workspaces_${dateStamp}.json`;
++     document.body.appendChild(link);
++     link.click();
++     document.body.removeChild(link);
++     URL.revokeObjectURL(url);
++     console.log('Export initiated for selected workspaces');
++     onClose(); // Close dialog via callback
++   }, [workspaces, selection, onClose]);
++ 
++   return (
++     <Dialog open={open} onClose={onClose}>
++       <DialogTitle>Select Workspaces to Export</DialogTitle>
++       <DialogContent>
++         <List>
++           {workspaceList.map((ws) => (
++             <ListItem key={ws.id} disablePadding>
++               <FormControlLabel
++                 control={
++                   <Checkbox
++                     checked={!!selection[ws.id]}
++                     onChange={handleSelectionChange}
++                     name={ws.id}
++                   />
++                 }
++                 label={ws.name}
++               />
++             </ListItem>
++           ))}
++         </List>
++         {workspaceList.length === 0 && <Typography>No workspaces to export.</Typography>}
++       </DialogContent>
++       <DialogActions>
++         <Button onClick={onClose}>Cancel</Button>
++         <Button onClick={handleConfirmExport} disabled={workspaceList.length === 0 || !Object.values(selection).some(v => v)}>Export Selected</Button>
++       </DialogActions>
++     </Dialog>
++   );
++ }
++ 
++ export default ExportDialog; 
+```
+
+---
+
+Creating `src/components/ImportDialog.tsx`:
+
+---
+
+```diff
+- 
++ import React, { useState, useEffect, useCallback } from 'react';
++ import {
++   Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel, Button, List, ListItem, Typography
++ } from '@mui/material';
++ import { useSetAtom } from 'jotai';
++ import { appStateAtom, usePushToastMsg } from '../state/atoms';
++ import type { WorkspaceData } from '../types';
++ 
++ interface ImportDialogProps {
++   open: boolean;
++   onClose: () => void;
++   workspacesToImport: Record<string, WorkspaceData>;
++   existingWorkspaceIds: string[];
++ }
++ 
++ function ImportDialog({ open, onClose, workspacesToImport, existingWorkspaceIds }: ImportDialogProps) {
++   const [selection, setSelection] = useState<Record<string, boolean>>({});
++   const setAppState = useSetAtom(appStateAtom);
++   const pushToastMsg = usePushToastMsg();
++   const workspaceList = Object.values(workspacesToImport);
++ 
++   // Initialize selection when dialog opens or imported data changes
++   useEffect(() => {
++     if (open) {
++       const initialSelection: Record<string, boolean> = {};
++       workspaceList.forEach(ws => {
++         initialSelection[ws.id] = true; // Default select all
++       });
++       setSelection(initialSelection);
++     }
++   }, [open, workspaceList]);
++ 
++   const handleSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
++     setSelection(prev => ({
++       ...prev,
++       [event.target.name]: event.target.checked,
++     }));
++   }, []);
++ 
++   const handleConfirmImport = useCallback(() => {
++     const selectedWorkspaces: Record<string, WorkspaceData> = {};
++     Object.keys(selection).forEach(id => {
++       if (selection[id] && workspacesToImport[id]) {
++         selectedWorkspaces[id] = workspacesToImport[id];
++       }
++     });
++ 
++     if (Object.keys(selectedWorkspaces).length === 0) {
++       pushToastMsg("Please select at least one workspace to import.");
++       return;
++     }
++ 
++     // Merge selected workspaces into the existing state
++     setAppState(prev => {
++         const newWorkspaces = { ...prev.workspaces };
++         let conflicts = false;
++         for (const id in selectedWorkspaces) {
++             const importedWs = selectedWorkspaces[id];
++             if (!importedWs) continue; // Should not happen
++ 
++             if (newWorkspaces[id]) {
++                 console.warn(`Workspace ID conflict: Overwriting existing workspace "${newWorkspaces[id].name}" with imported workspace "${importedWs.name}" (ID: ${id})`);
++                 conflicts = true;
++             }
++             newWorkspaces[id] = importedWs;
++         }
++ 
++         if (conflicts) {
++             pushToastMsg("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.");
++         } else {
++             pushToastMsg("Selected workspaces imported successfully!");
++         }
++         return {
++             ...prev,
++             workspaces: newWorkspaces,
++         };
++     });
++ 
++     console.log('Import confirmed for selected workspaces');
++     onClose(); // Close dialog via callback
++   }, [workspacesToImport, selection, setAppState, pushToastMsg, onClose]);
++ 
++   return (
++     <Dialog open={open} onClose={onClose}>
++       <DialogTitle>Select Workspaces to Import</DialogTitle>
++       <DialogContent>
++         <List>
++           {workspaceList.map((ws) => {
++             const exists = existingWorkspaceIds.includes(ws.id);
++             return (
++               <ListItem key={ws.id} disablePadding>
++                 <FormControlLabel
++                   control={
++                     <Checkbox
++                       checked={!!selection[ws.id]}
++                       onChange={handleSelectionChange}
++                       name={ws.id}
++                     />
++                   }
++                   label={`${ws.name}${exists ? ' (Overwrite Existing)' : ''}`}
++                 />
++               </ListItem>
++             );
++           })}
++         </List>
++         {workspaceList.length === 0 && <Typography>No valid workspaces found in the file.</Typography>}
++       </DialogContent>
++       <DialogActions>
++         <Button onClick={onClose}>Cancel</Button>
++         <Button onClick={handleConfirmImport} disabled={workspaceList.length === 0 || !Object.values(selection).some(v => v)}>Import Selected</Button>
++       </DialogActions>
++     </Dialog>
++   );
++ }
++ 
++ export default ImportDialog; 
+```
+
+---
+
+Now, updating `SidebarContent.tsx` to use these new components and remove the duplicated logic/state:
+
+---
+
+```diff
+  import {
+    Box, List, ListItem, ListItemButton, ListItemText, Divider, Button, Typography,
+-   Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel
+  } from '@mui/material';
+  import { useAtomValue, useSetAtom, useAtom } from 'jotai';
++ import { usePushToastMsg } from '../state/atoms';
+  import {
+    currentCardsAtom,
+    sidebarOpenAtom,
+    appStateAtom,
+-   usePushToastMsg,
+  } from '../state/atoms';
+  import WorkspaceSwitcher from './WorkspaceSwitcher';
+  import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
+  import type { WorkspaceData } from '../types';
++ import ExportDialog from './ExportDialog';
++ import ImportDialog from './ImportDialog';
+  
+  function SidebarContent() {
+    const centerOnPoint = useSetAtom(centerOnPointAtom);
+    const setIsSidebarOpen = useSetAtom(sidebarOpenAtom);
++   const [appState] = useAtom(appStateAtom);
+    const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
+-   const [appState, setAppState] = useAtom(appStateAtom);
++   const pushToastMsg = usePushToastMsg();
+    const currentWorkspaceName = currentWorkspaceId ? appState.workspaces[currentWorkspaceId]?.name : '-';
+    const fileInputRef = useRef<HTMLInputElement>(null);
+-   const pushToastMsg = usePushToastMsg();
+  
+-   // State for Export Dialog
++   // State for Export Dialog visibility
+    const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+-   const [exportSelection, setExportSelection] = useState<Record<string, boolean>>({});
+  
+-   // State for Import Dialog
++   // State for Import Dialog visibility and data
+    const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+    const [importedWorkspaces, setImportedWorkspaces] = useState<Record<string, WorkspaceData>>({});
+-   const [importSelection, setImportSelection] = useState<Record<string, boolean>>({});
+  
+    const handleNewWorkspace = useCallback(() => {
+  
+    // --- Export Logic ---
+- 
+    const handleExportClick = useCallback(() => {
+-     // Initialize selection state based on current workspaces
+-     const initialSelection: Record<string, boolean> = {};
+-     Object.keys(appState.workspaces).forEach(id => {
+-       initialSelection[id] = true; // Default to selecting all
+-     });
+-     setExportSelection(initialSelection);
+-     setIsExportDialogOpen(true); // Open the export dialog
+-   }, [appState.workspaces]);
+- 
+-   const handleExportSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+-     setExportSelection(prev => ({
+-       ...prev,
+-       [event.target.name]: event.target.checked,
+-     }));
++     setIsExportDialogOpen(true); // Just open the dialog
+    }, []);
+  
+-   const handleConfirmExport = useCallback(() => {
+-     const workspacesToExport: Record<string, WorkspaceData> = {};
+-     Object.keys(exportSelection).forEach(id => {
+-       if (exportSelection[id] && appState.workspaces[id]) {
+-         workspacesToExport[id] = appState.workspaces[id];
+-       }
+-     });
+- 
+-     if (Object.keys(workspacesToExport).length === 0) {
+-       pushToastMsg("Please select at least one workspace to export.");
+-       return;
+-     }
+- 
+-     const jsonString = JSON.stringify(workspacesToExport, null, 2); // Only export selected workspaces
+-     const blob = new Blob([jsonString], { type: 'application/json' });
+-     const url = URL.createObjectURL(blob);
+-     const link = document.createElement('a');
+-     link.href = url;
+-     const dateStamp = new Date().toISOString().slice(0, 10);
+-     link.download = `notecards_workspaces_${dateStamp}.json`; // Changed filename
+-     document.body.appendChild(link);
+-     link.click();
+-     document.body.removeChild(link);
+-     URL.revokeObjectURL(url);
+-     console.log('Export initiated for selected workspaces');
+-     setIsExportDialogOpen(false); // Close dialog
+-   }, [appState.workspaces, exportSelection, pushToastMsg]);
+- 
+-   const handleCancelExport = useCallback(() => {
++   const handleCloseExportDialog = useCallback(() => {
+      setIsExportDialogOpen(false);
+    }, []);
+  
+    // --- Import Logic ---
+- 
+    const handleImportClick = useCallback(() => {
+-     fileInputRef.current?.click(); // Trigger file input
++     fileInputRef.current?.click();
+    }, []);
+  
+          const parsedData = JSON.parse(jsonString);
+  
+-         // Basic validation: Check if it's an object (likely a record of workspaces)
+          if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData)) {
+-           // TODO: Add more robust validation for each workspace structure
+            const validWorkspaces: Record<string, WorkspaceData> = {};
+-           const initialSelection: Record<string, boolean> = {};
+            let hasValidWorkspace = false;
+- 
+            for (const id in parsedData) {
+-               // Rudimentary check for WorkspaceData structure
+-               if (parsedData[id] && typeof parsedData[id] === 'object' && 'name' in parsedData[id] && 'cards' in parsedData[id] && 'viewState' in parsedData[id]) {
+-                 validWorkspaces[id] = parsedData[id] as WorkspaceData;
+-                 initialSelection[id] = true; // Default select valid ones
++             const ws = parsedData[id];
++              // Check structure (can be improved with more robust validation)
++             if (ws && typeof ws === 'object' && 'name' in ws && 'cards' in ws && 'viewState' in ws) {
++               validWorkspaces[id] = ws as WorkspaceData;
+                hasValidWorkspace = true;
+              } else {
+  
+            setImportedWorkspaces(validWorkspaces);
+-           setImportSelection(initialSelection);
+            setIsImportDialogOpen(true); // Open import selection dialog
+- 
+          } else {
+-           throw new Error('Invalid file format. Expected a JSON object containing workspace data.');
++           throw new Error('Invalid file format. Expected JSON object of workspaces.');
+          }
+        } catch (error) {
+      };
+      reader.readAsText(file);
+-   }, [setAppState, pushToastMsg]);
+- 
+-   const handleImportSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+-     setImportSelection(prev => ({
+-       ...prev,
+-       [event.target.name]: event.target.checked,
+-     }));
+-   }, []);
+- 
+-   const handleConfirmImport = useCallback(() => {
+-     const workspacesToImport: Record<string, WorkspaceData> = {};
+-     Object.keys(importSelection).forEach(id => {
+-       if (importSelection[id] && importedWorkspaces[id]) {
+-         workspacesToImport[id] = importedWorkspaces[id];
+-       }
+-     });
+- 
+-      if (Object.keys(workspacesToImport).length === 0) {
+-       pushToastMsg("Please select at least one workspace to import.");
+-       return;
+-     }
+- 
+-     // Merge selected workspaces into the existing state
+-     setAppState(prev => {
+-         const newWorkspaces = { ...prev.workspaces };
+-         let conflicts = false;
+-         for (const id in workspacesToImport) {
+-             const importedWs = workspacesToImport[id];
+-             // Ensure importedWs is not undefined before proceeding (shouldn't happen based on previous logic, but good for type safety)
+-             if (!importedWs) continue;
+- 
+-             const existingWs = newWorkspaces[id];
+-             if (existingWs) {
+-                 // Simple conflict handling: Overwrite existing workspace with the same ID
+-                 console.warn(`Workspace ID conflict: Overwriting existing workspace "${existingWs.name}" with imported workspace "${importedWs.name}" (ID: ${id})`);
+-                 conflicts = true;
+-             }
+-             newWorkspaces[id] = importedWs; // Now TS knows importedWs is WorkspaceData
+-         }
+-         // Note: currentWorkspaceId is NOT updated here. The user stays in their current workspace.
+-         if (conflicts) {
+-             pushToastMsg("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.");
+-         } else {
+-             pushToastMsg("Selected workspaces imported successfully!");
+-         }
+-         return {
+-             ...prev,
+-             workspaces: newWorkspaces,
+-         };
+-     });
+- 
+- 
+-     console.log('Import confirmed for selected workspaces');
+-     setIsImportDialogOpen(false); // Close dialog
+-     setImportedWorkspaces({}); // Clear imported data
+-     setImportSelection({}); // Clear selection
+-   }, [importedWorkspaces, importSelection, setAppState, pushToastMsg]);
+- 
+-   const handleCancelImport = useCallback(() => {
++   }, [pushToastMsg]); // Removed setAppState, handled in ImportDialog
++ 
++   const handleCloseImportDialog = useCallback(() => {
+      setIsImportDialogOpen(false);
+-     setImportedWorkspaces({});
+-     setImportSelection({});
++     setImportedWorkspaces({}); // Clear data when closing
+    }, []);
+  
+    const cardList = Object.values(cards);
+- 
+-   const currentWorkspaceList = Object.values(appState.workspaces);
+-   const importedWorkspaceList = Object.values(importedWorkspaces);
++   const existingWorkspaceIds = Object.keys(appState.workspaces);
+  
+    return (
+        />
+  
+-       {/* Export Selection Dialog */}
+-       <Dialog open={isExportDialogOpen} onClose={handleCancelExport}>
+-         <DialogTitle>Select Workspaces to Export</DialogTitle>
+-         <DialogContent>
+-           <List>
+-             {currentWorkspaceList.map((ws) => (
+-               <ListItem key={ws.id} disablePadding>
+-                  <FormControlLabel
+-                     control={
+-                       <Checkbox
+-                         checked={!!exportSelection[ws.id]}
+-                         onChange={handleExportSelectionChange}
+-                         name={ws.id}
+-                       />
+-                     }
+-                     label={ws.name}
+-                   />
+-               </ListItem>
+-             ))}
+-           </List>
+-            {currentWorkspaceList.length === 0 && <Typography>No workspaces to export.</Typography>}
+-         </DialogContent>
+-         <DialogActions>
+-           <Button onClick={handleCancelExport}>Cancel</Button>
+-           <Button onClick={handleConfirmExport} disabled={currentWorkspaceList.length === 0 || !Object.values(exportSelection).some(v => v)}>Export Selected</Button>
+-         </DialogActions>
+-       </Dialog>
+- 
+-       {/* Import Selection Dialog */}
+-       <Dialog open={isImportDialogOpen} onClose={handleCancelImport}>
+-         <DialogTitle>Select Workspaces to Import</DialogTitle>
+-         <DialogContent>
+-           <List>
+-              {importedWorkspaceList.map((ws) => {
+-                 const existingWs = appState.workspaces[ws.id]; // Check if workspace exists
+-                 return (
+-                   <ListItem key={ws.id} disablePadding>
+-                     <FormControlLabel
+-                         control={
+-                           <Checkbox
+-                             checked={!!importSelection[ws.id]}
+-                             onChange={handleImportSelectionChange}
+-                             name={ws.id}
+-                           />
+-                         }
+-                         label={`${ws.name}${existingWs ? ' (Overwrite Existing)' : ''}`} // Use existingWs check
+-                       />
+-                   </ListItem>
+-                 );
+-             })}
+-           </List>
+-           {importedWorkspaceList.length === 0 && <Typography>No valid workspaces found in the file.</Typography>}
+-         </DialogContent>
+-         <DialogActions>
+-           <Button onClick={handleCancelImport}>Cancel</Button>
+-           <Button onClick={handleConfirmImport} disabled={importedWorkspaceList.length === 0 || !Object.values(importSelection).some(v => v)}>Import Selected</Button>
+-         </DialogActions>
+-       </Dialog>
+- 
++       {/* Export Dialog Component */}
++       <ExportDialog
++         open={isExportDialogOpen}
++         onClose={handleCloseExportDialog}
++         workspaces={appState.workspaces}
++       />
++ 
++       {/* Import Dialog Component */}
++       <ImportDialog
++         open={isImportDialogOpen}
++         onClose={handleCloseImportDialog}
++         workspacesToImport={importedWorkspaces}
++         existingWorkspaceIds={existingWorkspaceIds}
++       />
+      </Box>
+    );
+```
+
+---
+
+*   `Card.tsx`: Looks good. Dependencies seem correct. `useMemo` is used appropriately.
+*   `App.tsx`: Simple layout component, looks fine.
+*   `Workspace.tsx`: Looks fine. `usePanZoom` handles interactions.
+*   `index.tsx`: Basic setup, looks fine.
+
+**4. Dependencies**
+
+I'll quickly check `package.json` again for any obviously unused dependencies.
+
+---
+
+Read file: package.json
+
+---
+
+The dependencies look correct now - `nanoid`, `uuid`, and `notistack` are gone.
+
+**5. Final Check**
+
+Let's run `bun check` one more time to ensure the refactoring didn't introduce any type errors.
+
+---
+
+```bash
+bun check
+```
+
+```
+    ~/Pr/cards    master !7 ?1  bun check                                           ✔ 
+$ bun tsc
+src/state/atoms.ts:2:16 - error TS6133: 'useAtom' is declared but its value is never read.
+
+2 import { atom, useAtom, useSetAtom, useAtomValue, PrimitiveAtom } from 'jotai';
+                 ~~~~~~~
+
+src/state/atoms.ts:2:37 - error TS6133: 'useAtomValue' is declared but its value is never read.
+
+2 import { atom, useAtom, useSetAtom, useAtomValue, PrimitiveAtom } from 'jotai';
+                                      ~~~~~~~~~~~~
+
+src/state/atoms.ts:2:51 - error TS6133: 'PrimitiveAtom' is declared but its value is never read
+.
+
+2 import { atom, useAtom, useSetAtom, useAtomValue, PrimitiveAtom } from 'jotai';
+                                                    ~~~~~~~~~~~~~
+
+src/state/atoms.ts:4:1 - error TS6192: All imports in import declaration are unused.
+
+4 import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../components/Card';
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Found 4 errors in the same file, starting at: src/state/atoms.ts:2
+
+error: "tsc" exited with code 2
+    ~/Pr/cards    master ⇡1 !4 ?2                                                 2 ✘
+```
+
+---
+
+Ah, it seems removing the toast implementation that used `uuid` also removed the need for some Jotai hooks and the card size constants in `atoms.ts`. Let me clean those up.
+
+---
+
+```diff
+  import { atomWithStorage, createJSONStorage } from 'jotai/utils';
+- import { atom, useAtom, useSetAtom, useAtomValue, PrimitiveAtom } from 'jotai';
++ import { atom, useAtom, useSetAtom } from 'jotai';
+  import type { AppState, WorkspaceData, CardData, Point, ViewState, CardSize, ToastMesssage } from '../types';
+- import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../components/Card';
+- 
+- const DEFAULT_CARD_WIDTH = 200;
+- const DEFAULT_CARD_HEIGHT = 100;
+  
+  // Type for theme mode
+      const newCard: CardData = {
+        ...newCardData,
+-       size: { width: DEFAULT_CARD_WIDTH, height: DEFAULT_CARD_HEIGHT },
+-       id: crypto.randomUUID(), // Use crypto.randomUUID()
++       size: { width: 200, height: 100 },
++       id: crypto.randomUUID(),
+      };
+  
+```
+
+---
+
+Okay, the unused imports and constants have been removed from `src/state/atoms.ts`. Let's run `bun check` one more time.
+
+---
+
+```bash
+bun check
+```
+
+```
+    ~/Pr/cards    master ⇡1 !4 ?2  bun check
+$ bun tsc
+src/state/atoms.ts:2:16 - error TS6133: 'useAtom' is declared but its value is never read.
+
+2 import { atom, useAtom, useSetAtom } from 'jotai';
+                 ~~~~~~~
+
+
+Found 1 error in src/state/atoms.ts:2
+
+error: "tsc" exited with code 2
+    ~/Pr/cards    master ⇡1 !4 ?2                                                 2 ✘
+```
+
+---
+
+Ah, missed `useAtom` as well. Removing that now.
+
+---
+
+```diff
+  import { atomWithStorage, createJSONStorage } from 'jotai/utils';
+- import { atom, useAtom, useSetAtom } from 'jotai';
++ import { atom, useSetAtom } from 'jotai';
+  import type { AppState, WorkspaceData, CardData, Point, ViewState, CardSize, ToastMesssage } from '../types';
+  
+```
+
+---
+
+Let's try the check again.
+
+---
+
+```bash
+bun check
+```
+
+```
+    ~/Pr/cards    master ⇡1 !4 ?2  bun check                                      2 ✘ 
+$ bun tsc
+    ~/Pr/cards    master ⇡1 !4 ?2                                                   ✔
+```
+
+---
+
+Great! `bun check` passes.
+
+The cleanup pass involved:
+
+*   Updating `deleteCardAtom` to remove the card ID from the interaction order.
+*   Removing console logs from `usePanZoom`.
+*   Extracting the Export and Import dialogs from `SidebarContent` into their own components (`ExportDialog.tsx`, `ImportDialog.tsx`).
+*   Removing several unused imports and variables identified by `bun check`.
+
+The codebase should be slightly cleaner and better organized now.
+
+---
+
+_**User**_
+
+Currently, the app cursor css is set to "move" to indicate that you can drag.  however, we only want the "move" style to show when actually dragging. Can you make this change?
+
+---
+
 
 
 ---

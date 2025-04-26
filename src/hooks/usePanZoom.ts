@@ -88,18 +88,16 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
     }
   }, [containerRef, handleWheel]);
 
-  // --- Pan Logic (Mouse) --- //
+  // --- Pan Logic (Mouse) ---
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
     const targetElement = event.target as Element;
     const closestCard = targetElement.closest('[data-draggable-card="true"]');
+    if (closestCard) return;
 
-    if (closestCard) {
-      return;
-    }
     isPanning.current = true;
     startPanPoint.current = { x: event.clientX - pan.x, y: event.clientY - pan.y };
     if (containerRef.current) {
-      containerRef.current.style.cursor = 'grabbing';
+      containerRef.current.style.cursor = 'move';
     }
   }, [pan, containerRef]);
 
@@ -110,25 +108,23 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
     setPan({ x: newX, y: newY });
   }, []);
 
-  // Update atom only when panning STOPS
   const handleMouseUpOrLeave = useCallback(() => {
     if (isPanning.current) {
       updateStateAtom({ pan, zoom });
       isPanning.current = false;
       if (containerRef.current) {
-        containerRef.current.style.cursor = 'grab';
+        containerRef.current.style.cursor = 'grab'; // Reset to grab cursor
       }
     }
-  }, [containerRef, pan, zoom, updateStateAtom]); // Add pan, zoom, updateStateAtom dependency
+  }, [containerRef, pan, zoom, updateStateAtom]);
 
-  // --- Pan Logic (Touch) --- //
+  // --- Pan Logic (Touch) ---
   const handleTouchStart = useCallback(
     (event: React.TouchEvent) => {
       const targetElement = event.target as Element;
       const closestCard = targetElement.closest('[data-draggable-card="true"]');
-      if (closestCard) return; // Ignore touches starting on cards
+      if (closestCard) return;
 
-      // --- Pinch Start Detection ---
       if (event.touches.length === 2) {
         isPanning.current = false; // Stop panning if starting pinch
         isPinching.current = true;
@@ -147,19 +143,18 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
           zoom: zoom,
         };
       }
-      // --- Single Finger Pan Start ---
       else if (event.touches.length === 1 && !isPinching.current) {
         isPanning.current = true;
-        const touch = event.touches[0];
+        const touch = event.touches.item(0) as Touch | null;
         if (!touch) return;
         touchIdentifier.current = touch.identifier;
         startPanPoint.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
         if (containerRef.current) {
-          containerRef.current.style.cursor = 'grabbing';
+          containerRef.current.style.cursor = 'move';
         }
       }
     },
-    [pan, zoom, containerRef] // Added zoom dependency
+    [pan, zoom, containerRef]
   );
 
   const handleTouchMove = useCallback(
@@ -229,14 +224,15 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
 
   const handleTouchEndOrCancel = useCallback(
     (event: React.TouchEvent) => {
-      // If pinch was active, finalize state update
       if (isPinching.current) {
         updateStateAtom({ pan, zoom });
         isPinching.current = false;
         initialPinchState.current = null;
         pinchTouches.current = null;
+        if (containerRef.current) {
+          containerRef.current.style.cursor = 'grab'; // Reset to grab cursor
+        }
       }
-      // If panning was active, finalize state update
       else {
         let wasPanningTouch = false;
         for (let i = 0; i < event.changedTouches.length; i++) {
@@ -247,24 +243,21 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
           }
         }
         if (isPanning.current && wasPanningTouch) {
-          updateStateAtom({ pan, zoom }); // Update global state
+          updateStateAtom({ pan, zoom });
           isPanning.current = false;
           touchIdentifier.current = null;
           if (containerRef.current) {
-            containerRef.current.style.cursor = 'grab';
+            containerRef.current.style.cursor = 'grab'; // Reset to grab cursor
           }
         }
       }
     },
-    [containerRef, pan, zoom, updateStateAtom] // Add dependencies
+    [containerRef, pan, zoom, updateStateAtom]
   );
 
   return {
-    // We return the state directly, the useEffect handles atom updates
-    // pan, 
-    // zoom,
     containerProps: {
-      ref: containerRef, // Pass the ref
+      ref: containerRef,
       onMouseDown: handleMouseDown,
       onMouseMove: handleMouseMove,
       onMouseUp: handleMouseUpOrLeave,
@@ -273,9 +266,10 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
       onTouchMove: handleTouchMove,
       onTouchEnd: handleTouchEndOrCancel,
       onTouchCancel: handleTouchEndOrCancel,
-      style: { cursor: 'grab', touchAction: 'none' }, // touchAction none prevents browser scroll/zoom
+      style: {
+        touchAction: 'none'
+      },
     },
-    // The transform applies the pan and zoom to the direct child (content wrapper)
     contentTransform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
   };
 } 
