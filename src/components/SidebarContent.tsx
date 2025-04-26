@@ -4,6 +4,8 @@ import {
   IconButton
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/DeleteForever';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { useAtomValue, useSetAtom, useAtom } from 'jotai';
 import { usePushToastMsg } from '../state/atoms';
 import {
@@ -240,11 +242,11 @@ function SidebarContent() {
         New Workspace
       </Button>
       <Box sx={{ display: 'flex', justifyContent: 'space-around', p: 2, pt: 0 }}>
-        <Button onClick={handleImportClick} size="small">
-          Import Workspaces
+        <Button onClick={handleImportClick} size="small" startIcon={<FileUploadIcon />}>
+          Import
         </Button>
-        <Button onClick={handleExportClick} size="small">
-          Export Workspaces
+        <Button onClick={handleExportClick} size="small" startIcon={<FileDownloadIcon />}>
+          Export
         </Button>
       </Box>
       <input

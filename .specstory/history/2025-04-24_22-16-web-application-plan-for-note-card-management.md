@@ -11486,6 +11486,378 @@ Do not use native dialogs like alert or confirm.  Instead, use the appropriate M
 
 _**Assistant**_
 
+<details>
+            <summary>Grep search for "(alert\(|confirm\(|prompt\()" • **4** files</summary>
+        
+| File | Line | Match |
+|------|------|-------|
+| `file:///home/davidg/Projects/cards/src/components/ExportDialog.tsx` | L44 | `alert("Please select at least one workspace to export.");` |
+| `file:///home/davidg/Projects/cards/src/components/SidebarContent.tsx` | L45 | `const name = prompt('Enter new workspace name:', 'New Workspace');` |
+| `file:///home/davidg/Projects/cards/src/components/SidebarContent.tsx` | L63 | `if (window.confirm(`Are you sure you want to delete "${workspaceName}"? This action cannot be undone.`)) {` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L2348 | `+     const name = prompt('Enter new workspace name:', 'New Workspace');` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L4899 | `+     const name = prompt('Enter new workspace name:', 'New Workspace');` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8262 | `+           alert('Workspaces imported successfully! You might need to refresh if the current workspace changed.');` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8268 | `+         alert(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`);` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8277 | `+       alert(`Failed to read file: ${reader.error}`);` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8444 | `+       alert("Please select at least one workspace to export.");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8490 | `-           alert('Workspaces imported successfully! You might need to refresh if the current workspace changed.');` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8526 | `alert(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`);` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8533 | `alert(`Failed to read file: ${reader.error}`);` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8570 | `+       alert("Please select at least one workspace to import.");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8588 | `+             alert("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8590 | `+             alert("Selected workspaces imported successfully!");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8729 | `Okay, replacing the `alert()` calls with toast notifications is a good idea for a smoother user experience. We'll use the `notistack` library, which integrates well with Material UI.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8809 | `Finally, I'll update `src/components/SidebarContent.tsx` to use the `useSnackbar` hook and replace the `alert()` calls with `enqueueSnackbar`.` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8826 | `-       alert("Please select at least one workspace to export.");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8832 | `-         alert(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`);` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8838 | `-       alert(`Failed to read file: ${reader.error}`);` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8844 | `-       alert("Please select at least one workspace to import.");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8850 | `-             alert("Some imported workspaces had conflicting IDs with existing ones. Existing workspaces with the same IDs have been overwritten.");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8853 | `-             alert("Selected workspaces imported successfully!");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L8861 | `Done. I've wrapped the application in `SnackbarProvider` in `src/index.tsx` and replaced all `alert()` calls within `src/components/SidebarContent.tsx` with corresponding `enqueueSnackbar` calls, using appropriate variants ('success', 'warning', 'error').` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L10247 | `+       alert("Please select at least one workspace to export.");` |
+| `file:///home/davidg/Projects/cards/.specstory/history/2025-04-24_22-16-web-application-plan-for-note-card-management.md` | L11435 | `+     if (window.confirm(`Are you sure you want to delete "${workspaceName}"? This action cannot be undone.`)) {` |
+| `file:///home/davidg/Projects/cards/src/components/SidebarContent.tsx` | L45 | `const name = prompt('Enter new workspace name:', 'New Workspace');` |
+| `file:///home/davidg/Projects/cards/src/components/SidebarContent.tsx` | L63 | `if (window.confirm(`Are you sure you want to delete "${workspaceName}"? This action cannot be undone.`)) {` |
+
+</details>
+
+---
+
+You're absolutely right! I missed replacing some native dialog calls during the previous refactors.
+
+The search reveals:
+*   `alert()` is still used in `src/components/ExportDialog.tsx` (line 44) if no workspace is selected for export.
+*   `prompt()` is used in `src/components/SidebarContent.tsx` (line 45) for getting the new workspace name.
+*   `window.confirm()` is used in `src/components/SidebarContent.tsx` (line 63) for confirming workspace deletion.
+
+Let's replace these with appropriate MUI components.
+
+**1. Replace `alert` in `ExportDialog.tsx` with Toast**
+
+This is straightforward; we just need to use the `usePushToastMsg` hook.
+
+---
+
+```diff
+  } from '@mui/material';
+  import type { WorkspaceData } from '../types';
++ import { usePushToastMsg } from '../state/atoms';
+  
+  interface ExportDialogProps {
+    const [selection, setSelection] = useState<Record<string, boolean>>({});
+    const workspaceList = Object.values(workspaces);
++   const pushToastMsg = usePushToastMsg();
+  
+    // Initialize selection when dialog opens or workspaces change
+  
+      if (Object.keys(workspacesToExport).length === 0) {
+-       // Consider using toast here if available globally or passed as prop
+-       alert("Please select at least one workspace to export.");
++       pushToastMsg("Please select at least one workspace to export.");
+        return;
+      }
+      console.log('Export initiated for selected workspaces');
+      onClose(); // Close dialog via callback
+-   }, [workspaces, selection, onClose]);
++   }, [workspaces, selection, onClose, pushToastMsg]);
+  
+    return (
+```
+
+---
+
+**2. Replace `prompt` in `SidebarContent.tsx` with MUI Dialog + TextField**
+
+This requires creating a new small dialog component.
+
+Creating `src/components/InputDialog.tsx`:
+
+---
+
+```diff
+- 
++ import React, { useState, useCallback, useEffect } from 'react';
++ import {
++   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button
++ } from '@mui/material';
++ 
++ interface InputDialogProps {
++   open: boolean;
++   onClose: () => void;
++   onSubmit: (value: string) => void;
++   title: string;
++   label: string;
++   defaultValue?: string;
++ }
++ 
++ function InputDialog({
++   open,
++   onClose,
++   onSubmit,
++   title,
++   label,
++   defaultValue = '',
++ }: InputDialogProps) {
++   const [value, setValue] = useState(defaultValue);
++ 
++   // Reset value when dialog opens
++   useEffect(() => {
++     if (open) {
++       setValue(defaultValue);
++     }
++   }, [open, defaultValue]);
++ 
++   const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
++     setValue(event.target.value);
++   }, []);
++ 
++   const handleSubmit = useCallback(() => {
++     if (value.trim()) { // Ensure value is not just whitespace
++       onSubmit(value.trim());
++       onClose(); // Close after submit
++     }
++     // Optional: Add validation/error message if value is empty
++   }, [value, onSubmit, onClose]);
++ 
++   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
++       if (event.key === 'Enter') {
++           handleSubmit();
++       }
++   }, [handleSubmit]);
++ 
++   return (
++     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
++       <DialogTitle>{title}</DialogTitle>
++       <DialogContent>
++         <TextField
++           autoFocus
++           margin="dense"
++           id="input-dialog-field"
++           label={label}
++           type="text"
++           fullWidth
++           variant="standard"
++           value={value}
++           onChange={handleChange}
++           onKeyDown={handleKeyDown} // Allow submitting with Enter key
++         />
++       </DialogContent>
++       <DialogActions>
++         <Button onClick={onClose}>Cancel</Button>
++         <Button onClick={handleSubmit} disabled={!value.trim()}>Submit</Button>
++       </DialogActions>
++     </Dialog>
++   );
++ }
++ 
++ export default InputDialog; 
+```
+
+---
+
+Updating `SidebarContent.tsx` to use `InputDialog` for creating new workspaces:
+
+---
+
+```diff
+  import ExportDialog from './ExportDialog';
+  import ImportDialog from './ImportDialog';
++ import InputDialog from './InputDialog';
+  
+  function SidebarContent() {
+    const [importedWorkspaces, setImportedWorkspaces] = useState<Record<string, WorkspaceData>>({});
+  
+-   const handleNewWorkspace = useCallback(() => {
+-     const name = prompt('Enter new workspace name:', 'New Workspace');
++   // State for New Workspace Dialog
++   const [isNewWorkspaceDialogOpen, setIsNewWorkspaceDialogOpen] = useState(false);
++ 
++   const handleNewWorkspaceClick = useCallback(() => {
++     setIsNewWorkspaceDialogOpen(true); // Open the dialog
++   }, []);
++ 
++   const handleCreateWorkspaceSubmit = useCallback((name: string) => {
+      if (name) {
+        createWorkspace(name);
+      }
++     // Dialog closes itself on submit
+    }, [createWorkspace]);
++ 
++   const handleCloseNewWorkspaceDialog = useCallback(() => {
++       setIsNewWorkspaceDialogOpen(false);
++   }, []);
+  
+    const handleDeleteCurrentWorkspace = useCallback(() => {
+          </IconButton>
+        </Box>
+-       <Button onClick={handleNewWorkspace} sx={{ m: 2, mt: 0 }}>
++       <Button onClick={handleNewWorkspaceClick} sx={{ m: 2, mt: 0 }}>
+          New Workspace
+        </Button>
+          existingWorkspaceIds={existingWorkspaceIds}
+        />
++ 
++       {/* New Workspace Input Dialog */}
++       <InputDialog
++         open={isNewWorkspaceDialogOpen}
++         onClose={handleCloseNewWorkspaceDialog}
++         onSubmit={handleCreateWorkspaceSubmit}
++         title="Create New Workspace"
++         label="Workspace Name"
++         defaultValue="New Workspace"
++       />
+      </Box>
+    );
+```
+
+---
+
+**3. Replace `window.confirm` in `SidebarContent.tsx` with MUI Dialog**
+
+This also requires a new, simple confirmation dialog component.
+
+Creating `src/components/ConfirmDialog.tsx`:
+
+---
+
+```diff
+- 
++ import React from 'react';
++ import {
++   Dialog, DialogTitle, DialogContent, DialogActions, Typography, Button
++ } from '@mui/material';
++ 
++ interface ConfirmDialogProps {
++   open: boolean;
++   onClose: () => void;
++   onConfirm: () => void;
++   title: string;
++   children: React.ReactNode; // Content/description of the confirmation
++ }
++ 
++ function ConfirmDialog({
++   open,
++   onClose,
++   onConfirm,
++   title,
++   children,
++ }: ConfirmDialogProps) {
++ 
++   const handleConfirm = () => {
++     onConfirm();
++     onClose();
++   };
++ 
++   return (
++     <Dialog open={open} onClose={onClose} maxWidth="xs">
++       <DialogTitle>{title}</DialogTitle>
++       <DialogContent>
++         <Typography variant="body1">{children}</Typography>
++       </DialogContent>
++       <DialogActions>
++         <Button onClick={onClose}>Cancel</Button>
++         <Button onClick={handleConfirm} color="error">Confirm</Button>
++       </DialogActions>
++     </Dialog>
++   );
++ }
++ 
++ export default ConfirmDialog; 
+```
+
+---
+
+Updating `SidebarContent.tsx` to use `ConfirmDialog` for deleting workspaces:
+
+---
+
+```diff
+  import ImportDialog from './ImportDialog';
+  import InputDialog from './InputDialog';
++ import ConfirmDialog from './ConfirmDialog';
+  
+  function SidebarContent() {
+    // State for New Workspace Dialog
+    const [isNewWorkspaceDialogOpen, setIsNewWorkspaceDialogOpen] = useState(false);
++ 
++   // State for Delete Workspace Dialog
++   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
++   const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; name: string } | null>(null);
+  
+    const handleNewWorkspaceClick = useCallback(() => {
+    }, []);
+  
+-   const handleDeleteCurrentWorkspace = useCallback(() => {
++   const handleDeleteWorkspaceClick = useCallback(() => {
+      if (!currentWorkspaceId) {
+        pushToastMsg("No workspace selected.");
+      }
+      const workspaceName = appState.workspaces[currentWorkspaceId]?.name ?? 'this workspace';
+- 
+-     if (window.confirm(`Are you sure you want to delete "${workspaceName}"? This action cannot be undone.`)) {
+-       deleteWorkspace(currentWorkspaceId);
+-       pushToastMsg(`Workspace "${workspaceName}" deleted.`);
++     setWorkspaceToDelete({ id: currentWorkspaceId, name: workspaceName });
++     setIsDeleteDialogOpen(true); // Open confirmation dialog
++   }, [currentWorkspaceId, appState.workspaces, pushToastMsg]);
++ 
++   const handleConfirmDeleteWorkspace = useCallback(() => {
++     if (workspaceToDelete) {
++       deleteWorkspace(workspaceToDelete.id);
++       pushToastMsg(`Workspace "${workspaceToDelete.name}" deleted.`);
+      }
+-   }, [currentWorkspaceId, appState.workspaces, deleteWorkspace, pushToastMsg]);
++     // Dialog closes itself on confirm
++     setWorkspaceToDelete(null); // Clear the state
++   }, [workspaceToDelete, deleteWorkspace, pushToastMsg]);
++ 
++   const handleCloseDeleteDialog = useCallback(() => {
++     setIsDeleteDialogOpen(false);
++     setWorkspaceToDelete(null);
++   }, []);
+  
+    const handleCardClick = useCallback((cardId: string) => {
+          <WorkspaceSwitcher />
+          <IconButton
+-             onClick={handleDeleteCurrentWorkspace}
++             onClick={handleDeleteWorkspaceClick}
+              disabled={!canDeleteWorkspace}
+              size="small"
+          defaultValue="New Workspace"
+        />
++ 
++       {/* Confirm Delete Workspace Dialog */}
++       <ConfirmDialog
++         open={isDeleteDialogOpen}
++         onClose={handleCloseDeleteDialog}
++         onConfirm={handleConfirmDeleteWorkspace}
++         title="Confirm Delete Workspace"
++       >
++         Are you sure you want to delete workspace "{workspaceToDelete?.name ?? ''}"?
++         This action cannot be undone.
++       </ConfirmDialog>
++ 
+      </Box>
+    );
+```
+
+---
+
+All native dialogs (`alert`, `prompt`, `confirm`) have been replaced with appropriate MUI components (`Snackbar` via `usePushToastMsg`, `TextField` within a `Dialog`, and a custom `ConfirmDialog`).
+
+The application should now consistently use MUI components for user interactions and feedback.
+
+---
+
+_**User**_
+
+Update the Import/Export buttons to not include the word "workspaces". Also, add an appropriate icon to them each
+
+---
+
+_**Assistant**_
+
 
 
 ---
