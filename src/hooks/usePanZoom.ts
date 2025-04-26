@@ -113,7 +113,7 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
       updateStateAtom({ pan, zoom });
       isPanning.current = false;
       if (containerRef.current) {
-        containerRef.current.style.cursor = 'grab'; // Reset to grab cursor
+        containerRef.current.style.cursor = 'auto';
       }
     }
   }, [containerRef, pan, zoom, updateStateAtom]);
@@ -230,7 +230,7 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
         initialPinchState.current = null;
         pinchTouches.current = null;
         if (containerRef.current) {
-          containerRef.current.style.cursor = 'grab'; // Reset to grab cursor
+          containerRef.current.style.cursor = 'auto';
         }
       }
       else {
@@ -247,7 +247,7 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
           isPanning.current = false;
           touchIdentifier.current = null;
           if (containerRef.current) {
-            containerRef.current.style.cursor = 'grab'; // Reset to grab cursor
+            containerRef.current.style.cursor = 'auto';
           }
         }
       }

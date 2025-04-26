@@ -197,6 +197,8 @@ function Card({ cardId }: CardProps) {
         display: 'flex',
         flexDirection: 'column',
         willChange: 'transform, opacity',
+        animation: 'scaleIn 0.3s ease-out forwards',
+        transformOrigin: 'center center',
       }}
       style={dynamicStyles}
       {...draggableProps}

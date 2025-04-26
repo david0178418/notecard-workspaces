@@ -11132,6 +11132,77 @@ Now, I'll modify `App.tsx` to:
 
 ---
 
+```diff
+- import React, { useCallback } from 'react';
+- import { Box, Fab, Drawer } from '@mui/material';
++ import React, { useCallback, useEffect } from 'react';
++ import { Box, Fab, Drawer, CircularProgress } from '@mui/material';
+  import MenuIcon from '@mui/icons-material/Menu';
+  import AddIcon from '@mui/icons-material/Add';
+    currentViewStateAtom, // Import view state
+    viewportSizeAtom, // Import viewport size
++   isAppStateHydratedAtom, // Import hydration state
+  } from './state/atoms';
+  // import Toolbar from './components/Toolbar'; // No longer needed
+    const viewState = useAtomValue(currentViewStateAtom); // Get view state
+    const viewportSize = useAtomValue(viewportSizeAtom); // Get viewport size
++   // Hydration state
++   const [isHydrated, setIsHydrated] = useAtom(isAppStateHydratedAtom);
++ 
++   // Effect to mark state as hydrated after initial mount
++   useEffect(() => {
++     // This effect runs after the first render.
++     // We assume atomWithStorage has loaded the initial value from localStorage by this time.
++     // This is usually safe for client-side rendering with localStorage.
++     setIsHydrated(true);
++   }, [setIsHydrated]);
+  
+    const toggleDrawer = (open: boolean) => (event: React.KeyboardEvent | React.MouseEvent) => {
+        </Fab>
+  
+-       {/* Workspace Area */}
+-       <Box sx={{ height: '100%', width: '100%' }}>
+-         {currentWorkspaceId ? (
++       {/* Workspace Area - Conditional Rendering */}
++       <Box sx={{ height: '100%', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
++         {!isHydrated ? (
++           // Show loading spinner while waiting for hydration
++           <CircularProgress />
++         ) : currentWorkspaceId ? (
+            <Workspace />
+          ) : (
+-           <Box sx={{ p: 3, textAlign: 'center', height: '100%', display:'flex', alignItems:'center', justifyContent:'center' }}>
++           <Box sx={{ p: 3, textAlign: 'center' }}>
+              Create or select a workspace to begin.
+            </Box>
+```
+
+---
+
+Okay, the changes are implemented:
+
+1.  The unused import in `src/state/atoms.ts` is removed.
+2.  `App.tsx` now uses `useEffect` to set the `isAppStateHydratedAtom` to `true` after the initial mount.
+3.  The `Workspace` component (or the "Create/Select" message) is only rendered *after* `isAppStateHydratedAtom` becomes true. A `CircularProgress` indicator is shown while `isHydrated` is false.
+
+This should prevent the flash of initial content before the persisted state from `localStorage` is loaded. Please test it again.
+
+---
+
+_**User**_
+
+Can you update cards to appear with an animation? Let's have them animate from scale from 0 1 when rendered.
+
+If possible, do this with a css animation as opposed to a library like framer-motion.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
 
 
 ---
