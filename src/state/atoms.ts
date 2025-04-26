@@ -334,7 +334,7 @@ export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
   const defaultCardId = crypto.randomUUID();
   const defaultCard: CardData = {
       id: defaultCardId,
-      text: "New Card",
+      text: "",
       // Position at 100, 100
       position: { x: 100, y: 100 },
       size: { width: 200, height: 100 },

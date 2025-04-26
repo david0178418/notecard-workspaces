@@ -13368,6 +13368,105 @@ _**Assistant**_
 
 ---
 
+You've identified the issue correctly. That error indicates an infinite render loop caused by the `useEffect` hook in `ImportDialog.tsx`.
+
+Looking back at the code for `ImportDialog.tsx`, the problematic hook is this one:
+
+```typescript
+  // Initialize selection when dialog opens or imported data changes
+  useEffect(() => {
+    if (open) {
+      const initialSelection: Record<string, boolean> = {};
+      workspaceList.forEach(ws => { // workspaceList derived outside
+        initialSelection[ws.id] = true; // Default select all
+      });
+      setSelection(initialSelection); // Causes re-render
+    }
+  }, [open, workspaceList]); // Problem: workspaceList is a new array every render
+```
+
+The dependency `workspaceList` is calculated outside the effect (`const workspaceList = Object.values(workspacesToImport);`). This means `workspaceList` is a *new array reference* on every single render, even if the underlying `workspacesToImport` data hasn't changed. Since it's a dependency, the effect re-runs, calls `setSelection`, which triggers another render, creating a *new* `workspaceList` reference, causing the effect to run again, and so on.
+
+**The Fix:**
+
+We need to make the dependency stable. The effect should only re-run if `open` changes or the actual `workspacesToImport` prop changes. We can derive `workspaceList` *inside* the effect.
+
+I'll apply this fix to `src/components/ImportDialog.tsx`.
+
+---
+
+```diff
+    const setAppState = useSetAtom(appStateAtom);
+    const pushToastMsg = usePushToastMsg();
+-   const workspaceList = Object.values(workspacesToImport);
+  
+    // Initialize selection when dialog opens or imported data changes
+    useEffect(() => {
+      if (open) {
+        const initialSelection: Record<string, boolean> = {};
+-       workspaceList.forEach(ws => {
++       // Derive workspaceList inside the effect
++       const currentWorkspaceList = Object.values(workspacesToImport);
++       currentWorkspaceList.forEach(ws => {
+          initialSelection[ws.id] = true; // Default select all
+        });
+        setSelection(initialSelection);
+      }
+-   }, [open, workspaceList]);
++     // Depend on the prop itself, not the derived list
++   }, [open, workspacesToImport]);
+  
+    const handleSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+      onClose(); // Close dialog via callback
+    }, [workspacesToImport, selection, setAppState, pushToastMsg, onClose]);
++ 
++   // Use workspacesToImport directly for rendering the list
++   const workspaceListForRender = Object.values(workspacesToImport);
+  
+    return (
+        <DialogContent>
+          <List>
+-           {workspaceList.map((ws) => {
++           {workspaceListForRender.map((ws) => {
+              const exists = existingWorkspaceIds.includes(ws.id);
+              return (
+            })}
+          </List>
+-         {workspaceList.length === 0 && <Typography>No valid workspaces found in the file.</Typography>}
++         {workspaceListForRender.length === 0 && <Typography>No valid workspaces found in the file.</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>Cancel</Button>
+-         <Button onClick={handleConfirmImport} disabled={workspaceList.length === 0 || !Object.values(selection).some(v => v)}>Import Selected</Button>
++         <Button onClick={handleConfirmImport} disabled={workspaceListForRender.length === 0 || !Object.values(selection).some(v => v)}>Import Selected</Button>
+        </DialogActions>
+      </Dialog>
+```
+
+---
+
+Okay, I've modified the `useEffect` hook in `src/components/ImportDialog.tsx`:
+
+1.  The dependency array now correctly uses `workspacesToImport` (the prop) instead of the locally derived `workspaceList`.
+2.  The `workspaceList` needed for the `forEach` loop is now derived *inside* the effect hook.
+3.  A separate `workspaceListForRender` variable is derived for mapping in the JSX to keep the render logic clear.
+
+This should break the infinite loop and resolve the "Maximum update depth exceeded" error.
+
+---
+
+_**User**_
+
+Take a pass at updating the readme where needed
+
+---
+
+_**Assistant**_
+
+
+
+---
+
 
 
 ---
