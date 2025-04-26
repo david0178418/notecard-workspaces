@@ -19,6 +19,9 @@ import { useTheme } from '@mui/material/styles';
 export const MIN_CARD_WIDTH = 150;
 export const MIN_CARD_HEIGHT = 80;
 
+// Define default card text
+export const DEFAULT_CARD_TEXT = "New Card";
+
 interface CardProps {
   cardId: string;
 }
@@ -227,7 +230,7 @@ function Card({ cardId }: CardProps) {
             onBlur={handleTextBlur}
             onKeyDown={handleTextKeyDown}
             autoFocus
-            placeholder="New Card"
+            placeholder={DEFAULT_CARD_TEXT}
             InputProps={{ disableUnderline: true }}
             sx={{
               // Target the textarea for text alignment and padding
@@ -250,7 +253,7 @@ function Card({ cardId }: CardProps) {
               maxHeight: '100%' // Ensure Typography doesn't exceed CardContent height
             }}
           >
-            {cardData.text || "New Card"}
+            {cardData.text || DEFAULT_CARD_TEXT}
           </Typography>
         )}
         <IconButton

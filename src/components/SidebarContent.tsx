@@ -21,7 +21,7 @@ import {
   updateCardOrderAtom,
 } from '../state/atoms';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
-import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
+import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT, DEFAULT_CARD_TEXT } from './Card';
 import type { WorkspaceData, CardData } from '../types';
 import ExportDialog from './ExportDialog';
 import ImportDialog from './ImportDialog';
@@ -227,7 +227,7 @@ function SidebarContent() {
                          </Box>
                          <ListItemButton onClick={() => handleCardClick(card.id)} sx={{ pl: 0 }}>
                             <ListItemText
-                              primary={(card.text || 'New Card').substring(0, 50) + ((card.text || 'New Card').length > 50 ? '...' : '')}
+                              primary={(card.text || DEFAULT_CARD_TEXT).substring(0, 50) + ((card.text || DEFAULT_CARD_TEXT).length > 50 ? '...' : '')}
                               sx={{ pr: 1 }}
                             />
                           </ListItemButton>

@@ -1,6 +1,7 @@
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import { atom, useSetAtom } from 'jotai';
 import type { AppState, WorkspaceData, CardData, Point, ViewState, CardSize, ToastMesssage } from '../types';
+import { DEFAULT_CARD_TEXT } from '../components/Card';
 
 // Type for theme mode
 export type ThemeMode = 'light' | 'dark';
@@ -334,8 +335,7 @@ export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
   const defaultCardId = crypto.randomUUID();
   const defaultCard: CardData = {
       id: defaultCardId,
-      text: "",
-      // Position at 100, 100
+      text: DEFAULT_CARD_TEXT,
       position: { x: 100, y: 100 },
       size: { width: 200, height: 100 },
   };
