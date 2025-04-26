@@ -39,6 +39,10 @@ const initialAppState: AppState = {
 // but explicitly providing it makes the type handling more robust.
 const storage = createJSONStorage<AppState>(() => localStorage);
 
+// --- Hydration State --- //
+// Atom to track if the main persisted state has been loaded
+export const isAppStateHydratedAtom = atom(false);
+
 /**
  * The main atom holding the entire application state.
  * It automatically persists to localStorage under the key 'notecardAppState'.
