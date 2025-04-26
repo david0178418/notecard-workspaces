@@ -19,7 +19,7 @@ const getSystemTheme = (): ThemeMode => {
 };
 
 // Define the initial state conforming to the AppState interface
-const initialWorkspaceId = crypto.randomUUID();
+const initialWorkspaceId = crypto.randomUUID(); // Keep track of the *very first* ID
 
 // Removed sample card generation IDs here
 
@@ -30,6 +30,7 @@ const initialAppState: AppState = {
       name: 'Default Workspace',
       cards: {}, // Start with an empty cards object
       viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
+      cardOrder: [], // Initialize card order
     },
   },
   currentWorkspaceId: initialWorkspaceId,
@@ -171,24 +172,21 @@ export const addCardAtom = atom(
     const currentId = get(currentWorkspaceIdAtom);
     if (!currentId) return;
 
-    // Define default size here to use for offset calculation
     const defaultWidth = 200;
     const defaultHeight = 100;
-
-    // Adjust the position to center the card on the target point
     const adjustedPosition = {
       x: newCardData.position.x - defaultWidth / 2,
       y: newCardData.position.y - defaultHeight / 2,
     };
+    const newCardId = crypto.randomUUID(); // Generate ID once
 
     const newCard: CardData = {
-      text: newCardData.text, // Ensure text is included
-      position: adjustedPosition, // Use the adjusted position
+      text: newCardData.text,
+      position: adjustedPosition,
       size: { width: defaultWidth, height: defaultHeight },
-      id: crypto.randomUUID(),
+      id: newCardId, // Use generated ID
     };
 
-    // First, update the main state with the new card
     set(appStateAtom, (prev) => {
       const currentWorkspace = prev.workspaces[currentId];
       if (!currentWorkspace) return prev;
@@ -200,18 +198,19 @@ export const addCardAtom = atom(
             ...currentWorkspace,
             cards: {
               ...currentWorkspace.cards,
-              [newCard.id]: newCard,
+              [newCardId]: newCard,
             },
+            cardOrder: [...currentWorkspace.cardOrder, newCardId],
           },
         },
       };
     });
 
     // Second, add the new card ID to the interaction order
-    set(interactionOrderAtom, (prevOrder) => [...prevOrder, newCard.id]);
+    set(interactionOrderAtom, (prevOrder) => [...prevOrder, newCardId]);
 
     // Finally, set the ID for autofocus trigger
-    set(lastCreatedCardIdAtom, newCard.id);
+    set(lastCreatedCardIdAtom, newCardId);
   }
 );
 
@@ -306,13 +305,10 @@ export const deleteCardAtom = atom(
     const currentId = get(currentWorkspaceIdAtom);
     if (!currentId) return;
 
-    // Update the main state
     set(appStateAtom, (prev) => {
       const currentWorkspace = prev.workspaces[currentId];
       if (!currentWorkspace?.cards[cardId]) return prev;
-
       const { [cardId]: _, ...remainingCards } = currentWorkspace.cards;
-
       return {
         ...prev,
         workspaces: {
@@ -320,24 +316,38 @@ export const deleteCardAtom = atom(
           [currentId]: {
             ...currentWorkspace,
             cards: remainingCards,
+            cardOrder: currentWorkspace.cardOrder.filter(id => id !== cardId),
           },
         },
       };
     });
 
-    // Also remove the card ID from the interaction order
     set(interactionOrderAtom, (prevOrder) => prevOrder.filter(id => id !== cardId));
   }
 );
 
 // Action to create a new workspace
 export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
-  const newId = crypto.randomUUID(); // Use crypto.randomUUID()
+  const newId = crypto.randomUUID();
+
+  // Create a single default card for the new workspace
+  const defaultCardId = crypto.randomUUID();
+  const defaultCard: CardData = {
+      id: defaultCardId,
+      text: "New Card",
+      // Position at 100, 100
+      position: { x: 100, y: 100 },
+      size: { width: 200, height: 100 },
+  };
+
   const newWorkspace: WorkspaceData = {
     id: newId,
     name,
-    cards: {},
+    cards: {
+        [defaultCardId]: defaultCard,
+    },
     viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
+    cardOrder: [defaultCardId],
   };
 
   set(appStateAtom, (prev) => ({
@@ -348,6 +358,9 @@ export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
     },
     currentWorkspaceId: newId, // Switch to the new workspace
   }));
+
+  // Set the last created card ID for potential focus (optional)
+  set(lastCreatedCardIdAtom, defaultCardId);
 });
 
 // Action to switch the current workspace
@@ -428,12 +441,15 @@ export const bringCardToFrontAtom = atom(
   }
 );
 
-// Action to add initial sample cards if the current workspace is empty
+// Action to add initial sample cards if the current workspace is empty AND is the initial one
 export const addInitialSampleCardsAtom = atom(
     null,
     (get, set) => {
         const currentId = get(currentWorkspaceIdAtom);
-        if (!currentId) return; // No workspace selected
+        // Only run if the current workspace IS the initial default workspace
+        if (!currentId || currentId !== initialWorkspaceId) {
+            return;
+        }
 
         const appState = get(appStateAtom);
         const currentWorkspace = appState.workspaces[currentId];
@@ -462,40 +478,23 @@ export const addInitialSampleCardsAtom = atom(
         const largeCardWidth = 250;
         const largeCardHeight = 150;
 
-        const sampleCards: Record<string, CardData> = {
-            [crypto.randomUUID()]: {
-                id: crypto.randomUUID(), // Need to generate ID here
-                text: "Welcome! 🎉\nUse these cards to brainstorm.\nDouble-click to edit, drag to move!",
-                position: { x: centerX - (cardWidth * 1.5), y: centerY - (cardHeight * 1.0) },
-                size: { width: cardWidth, height: cardHeight },
-            },
-            [crypto.randomUUID()]: {
-                id: crypto.randomUUID(),
-                text: "💡 Main Idea\n[Your central theme goes here]",
-                position: { x: centerX + (cardWidth * 0.5), y: centerY - (cardHeight * 0.8) },
-                size: { width: cardWidth, height: cardHeight },
-            },
-            [crypto.randomUUID()]: {
-                id: crypto.randomUUID(),
-                text: "Supporting Detail or Question?\n\n- Use different sizes for emphasis or longer notes.\n- Drag the corner to resize.\n- What related topics come to mind?",
-                position: { x: centerX - (largeCardWidth * 0.5), y: centerY + (cardHeight * 0.5) },
-                size: { width: largeCardWidth, height: largeCardHeight },
-            },
-            [crypto.randomUUID()]: {
-                id: crypto.randomUUID(),
-                text: "➡️ Next Steps?\n- Action item 1\n- Follow-up question",
-                position: { x: centerX + (cardWidth * 0.5), y: centerY + (cardHeight * 0.7) }, // Adjusted y
-                size: { width: cardWidth, height: cardHeight },
-            },
-        };
+        // Define sample card data (without IDs initially)
+        const sampleCardDefinitions = [
+            { text: "Welcome! 🎉\nUse these cards to brainstorm.\nDouble-click to edit, drag to move!", position: { x: centerX - (cardWidth * 1.5), y: centerY - (cardHeight * 1.0) }, size: { width: cardWidth, height: cardHeight } },
+            { text: "💡 Main Idea\n[Your central theme goes here]", position: { x: centerX + (cardWidth * 0.5), y: centerY - (cardHeight * 0.8) }, size: { width: cardWidth, height: cardHeight } },
+            { text: "Supporting Detail or Question?\n\n- Use different sizes for emphasis or longer notes.\n- Drag the corner to resize.\n- What related topics come to mind?", position: { x: centerX - (largeCardWidth * 0.5), y: centerY + (cardHeight * 0.5) }, size: { width: largeCardWidth, height: largeCardHeight } },
+            { text: "➡️ Next Steps?\n- Action item 1\n- Follow-up question", position: { x: centerX + (cardWidth * 0.5), y: centerY + (cardHeight * 0.7) }, size: { width: cardWidth, height: cardHeight } },
+        ];
 
-        // Fix: Correctly regenerate IDs inside the objects
+        // Generate IDs and create final objects
         const finalSampleCards: Record<string, CardData> = {};
-        Object.values(sampleCards).forEach(card => {
-            const newId = crypto.randomUUID();
-            finalSampleCards[newId] = { ...card, id: newId };
-        });
+        const finalCardOrder: string[] = [];
 
+        sampleCardDefinitions.forEach(def => {
+            const newId = crypto.randomUUID();
+            finalSampleCards[newId] = { ...def, id: newId };
+            finalCardOrder.push(newId); // Add ID to the order array
+        });
 
         console.log("Adding initial sample cards centered at:", {centerX, centerY});
 
@@ -506,11 +505,37 @@ export const addInitialSampleCardsAtom = atom(
                 ...prev.workspaces,
                 [currentId]: {
                     ...currentWorkspace,
-                    cards: finalSampleCards, // Add the newly generated cards
+                    cards: finalSampleCards,
+                    cardOrder: finalCardOrder, // Set the cardOrder
                 },
             },
         }));
     }
+);
+
+// Action atom to update the card order for a specific workspace
+export const updateCardOrderAtom = atom(
+  null,
+  (get, set, { workspaceId, newOrder }: { workspaceId: string; newOrder: string[] }) => {
+    const currentId = workspaceId ?? get(currentWorkspaceIdAtom); // Allow specific ID or use current
+    if (!currentId) return;
+
+    set(appStateAtom, (prev) => {
+      const targetWorkspace = prev.workspaces[currentId];
+      if (!targetWorkspace) return prev; // Workspace doesn't exist
+
+      return {
+        ...prev,
+        workspaces: {
+          ...prev.workspaces,
+          [currentId]: {
+            ...targetWorkspace,
+            cardOrder: newOrder,
+          },
+        },
+      };
+    });
+  }
 );
 
 // Example of a derived atom (we will add more later as needed)

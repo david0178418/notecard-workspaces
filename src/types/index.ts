@@ -29,6 +29,7 @@ export interface WorkspaceData {
   name: string;
   cards: Record<string, CardData>; // Using Record for easy ID lookup
   viewState: ViewState;
+  cardOrder: string[]; // Add field to store card display order
 }
 
 export interface AppState {

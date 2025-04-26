@@ -12247,6 +12247,1072 @@ _**Assistant**_
 
 ---
 
+Okay, that makes sense. When selecting a card from the sidebar list, it should not only center the view but also be brought visually to the front.
+
+This involves calling the `bringCardToFrontAtom` action within the `handleCardClick` function in `src/components/SidebarContent.tsx`.
+
+I'll modify `handleCardClick` to:
+
+1.  Import `bringCardToFrontAtom`.
+2.  Get the setter function using `useSetAtom`.
+3.  Call the setter with the `cardId` before centering the view.
+
+---
+
+```diff
+    deleteCardAtom,
+    deleteWorkspaceAtom,
++   bringCardToFrontAtom,
+  } from '../state/atoms';
+  import WorkspaceSwitcher from './WorkspaceSwitcher';
+    const deleteCard = useSetAtom(deleteCardAtom);
+    const deleteWorkspace = useSetAtom(deleteWorkspaceAtom);
++   const bringCardToFront = useSetAtom(bringCardToFrontAtom);
+    const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
+    const pushToastMsg = usePushToastMsg();
+      if (!card) return;
+  
++     // Bring card to front first
++     bringCardToFront(cardId);
++ 
++     // Then calculate center and pan
+      const cardWidth = card.size?.width ?? MIN_CARD_WIDTH;
+      const cardHeight = card.size?.height ?? MIN_CARD_HEIGHT;
+- 
+      const cardCenterX = card.position.x + cardWidth / 2;
+      const cardCenterY = card.position.y + cardHeight / 2;
+- 
+      centerOnPoint({ x: cardCenterX, y: cardCenterY });
+  
++     // Close sidebar
+      setIsSidebarOpen(false);
+  
+-   }, [cards, centerOnPoint, setIsSidebarOpen]);
++   }, [cards, centerOnPoint, bringCardToFront, setIsSidebarOpen]);
+  
+    const handleDeleteCard = useCallback((event: React.MouseEvent, cardId: string) => {
+```
+
+---
+
+Done. The `handleCardClick` function in `src/components/SidebarContent.tsx` now calls `bringCardToFront(cardId)` before calculating the center and calling `centerOnPoint`. Clicking a card in the sidebar list will now bring it to the front visually in addition to centering the view on it.
+
+---
+
+_**User**_
+
+Add the ability to sort items in the side bar by dragging
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, adding drag-and-drop sorting to the sidebar card list requires a library and modifications to how the card order is stored and managed.
+
+**1. Install Drag-and-Drop Library**
+
+I'll use `@hello-pangea/dnd`, a well-maintained fork of `react-beautiful-dnd` that works well with React 18+.
+
+---
+
+```bash
+bun add @hello-pangea/dnd
+```
+
+```
+    ~/Pr/cards    master ⇡1 !4 ?2  bun add @hello-pangea/dnd                        ✔ 
+bun add v1.2.10 (db2e7d7f)
+
+installed @hello-pangea/dnd@18.0.1
+
+8 packages installed [1248.00ms]
+    ~/Pr/cards    master ⇡6 !3                                                      ✔
+```
+
+---
+
+**2. Update Types and State for Card Order**
+
+We need to store the specific order of cards for each workspace.
+
+*   **Modify `src/types/index.ts`:** Add `cardOrder: string[]` to the `WorkspaceData` interface.
+
+---
+
+```diff
+    cards: Record<string, CardData>; // Using Record for easy ID lookup
+    viewState: ViewState;
++   cardOrder: string[]; // Add field to store card display order
+  }
+  
+```
+
+---
+
+*   **Modify `src/state/atoms.ts`:**
+    *   Initialize `cardOrder: []` in the default `initialAppState`.
+    *   Initialize `cardOrder: []` in `createWorkspaceAtom`.
+    *   Update `addCardAtom` to push the new card's ID to the `cardOrder`.
+    *   Update `deleteCardAtom` to filter the ID out of the `cardOrder`.
+    *   Add a new `updateCardOrderAtom` action.
+
+---
+
+```diff
+        cards: {}, // Start with an empty cards object
+        viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
++       cardOrder: [], // Initialize card order
+      },
+    },
+      if (!currentId) return;
+  
+-     // Define default size here to use for offset calculation
+      const defaultWidth = 200;
+      const defaultHeight = 100;
+- 
+-     // Adjust the position to center the card on the target point
+      const adjustedPosition = {
+        x: newCardData.position.x - defaultWidth / 2,
+        y: newCardData.position.y - defaultHeight / 2,
+      };
++     const newCardId = crypto.randomUUID(); // Generate ID once
+  
+      const newCard: CardData = {
+-       text: newCardData.text, // Ensure text is included
+-       position: adjustedPosition, // Use the adjusted position
++       text: newCardData.text,
++       position: adjustedPosition,
+        size: { width: defaultWidth, height: defaultHeight },
+-       id: crypto.randomUUID(),
++       id: newCardId, // Use generated ID
+      };
+  
+-     // First, update the main state with the new card
+      set(appStateAtom, (prev) => {
+        const currentWorkspace = prev.workspaces[currentId];
+              cards: {
+                ...currentWorkspace.cards,
+-               [newCard.id]: newCard,
++               [newCardId]: newCard,
+              },
++             cardOrder: [...currentWorkspace.cardOrder, newCardId],
+            },
+          },
+  
+      // Second, add the new card ID to the interaction order
+-     set(interactionOrderAtom, (prevOrder) => [...prevOrder, newCard.id]);
++     set(interactionOrderAtom, (prevOrder) => [...prevOrder, newCardId]);
+  
+      // Finally, set the ID for autofocus trigger
+-     set(lastCreatedCardIdAtom, newCard.id);
++     set(lastCreatedCardIdAtom, newCardId);
+    }
+  );
+      if (!currentId) return;
+  
+-     // Update the main state
+      set(appStateAtom, (prev) => {
+        const currentWorkspace = prev.workspaces[currentId];
+        if (!currentWorkspace?.cards[cardId]) return prev;
+- 
+        const { [cardId]: _, ...remainingCards } = currentWorkspace.cards;
+- 
+        return {
+          ...prev,
+              ...currentWorkspace,
+              cards: remainingCards,
++             cardOrder: currentWorkspace.cardOrder.filter(id => id !== cardId),
+            },
+          },
+        };
+      });
+  
+-     // Also remove the card ID from the interaction order
+      set(interactionOrderAtom, (prevOrder) => prevOrder.filter(id => id !== cardId));
+    }
+  // Action to create a new workspace
+  export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
+-   const newId = crypto.randomUUID(); // Use crypto.randomUUID()
++   const newId = crypto.randomUUID();
+    const newWorkspace: WorkspaceData = {
+      id: newId,
+      name,
+      cards: {},
+      viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
++     cardOrder: [], // Initialize card order
+    };
+  
+              },
+          }));
++     }
++ );
++ 
++ // Action atom to update the card order for a specific workspace
++ export const updateCardOrderAtom = atom(
++   null,
++   (get, set, { workspaceId, newOrder }: { workspaceId: string; newOrder: string[] }) => {
++     const currentId = workspaceId ?? get(currentWorkspaceIdAtom); // Allow specific ID or use current
++     if (!currentId) return;
++ 
++     set(appStateAtom, (prev) => {
++       const targetWorkspace = prev.workspaces[currentId];
++       if (!targetWorkspace) return prev; // Workspace doesn't exist
++ 
++       return {
++         ...prev,
++         workspaces: {
++           ...prev.workspaces,
++           [currentId]: {
++             ...targetWorkspace,
++             cardOrder: newOrder,
++           },
++         },
++       };
++     });
+    }
+  );
+```
+
+---
+
+**3. Modify `SidebarContent.tsx`**
+
+Now, I'll integrate `@hello-pangea/dnd` into the component.
+
+*   Import necessary components and hooks.
+*   Get the current workspace's `cardOrder`.
+*   Implement the `onDragEnd` handler to reorder the list and call `updateCardOrderAtom`.
+*   Wrap the `List` with `DragDropContext` and `Droppable`.
+*   Wrap each `ListItem` with `Draggable`.
+
+---
+
+```diff
+  import FileUploadIcon from '@mui/icons-material/FileUpload';
+  import FileDownloadIcon from '@mui/icons-material/FileDownload';
+- import { useAtomValue, useSetAtom, useAtom } from 'jotai';
++ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
++ import { useAtomValue, useSetAtom } from 'jotai';
+  import { usePushToastMsg } from '../state/atoms';
+  import {
+    deleteWorkspaceAtom,
+    bringCardToFrontAtom,
++   updateCardOrderAtom,
+  } from '../state/atoms';
+  import WorkspaceSwitcher from './WorkspaceSwitcher';
+  import InputDialog from './InputDialog';
+  import ConfirmDialog from './ConfirmDialog';
++ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
++ import type { DropResult } from '@hello-pangea/dnd';
+  
+  function SidebarContent() {
+    const centerOnPoint = useSetAtom(centerOnPointAtom);
+    const setIsSidebarOpen = useSetAtom(sidebarOpenAtom);
+-   const [appState] = useAtom(appStateAtom);
++   const appState = useAtomValue(appStateAtom);
+    const deleteCard = useSetAtom(deleteCardAtom);
+    const deleteWorkspace = useSetAtom(deleteWorkspaceAtom);
+    const bringCardToFront = useSetAtom(bringCardToFrontAtom);
++   const updateCardOrder = useSetAtom(updateCardOrderAtom);
+    const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
+    const pushToastMsg = usePushToastMsg();
+-   const currentWorkspaceName = currentWorkspaceId ? appState.workspaces[currentWorkspaceId]?.name : '-';
+-   const fileInputRef = useRef<HTMLInputElement>(null);
+- 
+-   // State for Export Dialog visibility
+-   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+- 
+-   // State for Import Dialog visibility and data
+-   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+-   const [importedWorkspaces, setImportedWorkspaces] = useState<Record<string, WorkspaceData>>({});
+- 
+-   // State for New Workspace Dialog
+-   const [isNewWorkspaceDialogOpen, setIsNewWorkspaceDialogOpen] = useState(false);
+- 
+-   // State for Delete Workspace Dialog
+-   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+-   const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; name: string } | null>(null);
++   const currentWorkspace = currentWorkspaceId ? appState.workspaces[currentWorkspaceId] : null;
++   const currentWorkspaceName = currentWorkspace?.name ?? '-';
++ 
++   const cardOrder = currentWorkspace?.cardOrder ?? Object.keys(currentWorkspace?.cards ?? {});
++   const orderedCards = cardOrder.map(id => currentWorkspace?.cards[id]).filter(Boolean) as CardData[];
++ 
++   const onDragEnd = useCallback((result: DropResult) => {
++     const { destination, source, draggableId } = result;
++ 
++     if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) {
++       return;
++     }
++ 
++     if (destination.droppableId !== 'sidebar-card-list') {
++         return;
++     }
++ 
++     const newOrder = Array.from(cardOrder);
++     newOrder.splice(source.index, 1);
++     newOrder.splice(destination.index, 0, draggableId);
++ 
++     if (currentWorkspaceId) {
++         updateCardOrder({ workspaceId: currentWorkspaceId, newOrder });
++     }
++ 
++   }, [cardOrder, updateCardOrder, currentWorkspaceId]);
+  
+    const handleNewWorkspaceClick = useCallback(() => {
+-     setIsNewWorkspaceDialogOpen(true); // Open the dialog
++     setIsNewWorkspaceDialogOpen(true);
+    }, []);
+  
+        createWorkspace(name);
+      }
+-     // Dialog closes itself on submit
+    }, [createWorkspace]);
+  
+      const workspaceName = appState.workspaces[currentWorkspaceId]?.name ?? 'this workspace';
+      setWorkspaceToDelete({ id: currentWorkspaceId, name: workspaceName });
+-     setIsDeleteDialogOpen(true); // Open confirmation dialog
++     setIsDeleteDialogOpen(true);
+    }, [currentWorkspaceId, appState.workspaces, pushToastMsg]);
+  
+        pushToastMsg(`Workspace "${workspaceToDelete.name}" deleted.`);
+      }
+-     // Dialog closes itself on confirm
+-     setWorkspaceToDelete(null); // Clear the state
++     setWorkspaceToDelete(null);
+    }, [workspaceToDelete, deleteWorkspace, pushToastMsg]);
+  
+      if (!card) return;
+  
+-     // Bring card to front first
+      bringCardToFront(cardId);
+  
+-     // Then calculate center and pan
+      const cardWidth = card.size?.width ?? MIN_CARD_WIDTH;
+      const cardHeight = card.size?.height ?? MIN_CARD_HEIGHT;
+      centerOnPoint({ x: cardCenterX, y: cardCenterY });
+  
+-     // Close sidebar
+      setIsSidebarOpen(false);
+  
+    }, [deleteCard]);
+  
+-   // --- Export Logic ---
+    const handleExportClick = useCallback(() => {
+-     setIsExportDialogOpen(true); // Just open the dialog
++     setIsExportDialogOpen(true);
+    }, []);
+  
+    }, []);
+  
+-   // --- Import Logic ---
+    const handleImportClick = useCallback(() => {
+      fileInputRef.current?.click();
+            for (const id in parsedData) {
+              const ws = parsedData[id];
+-              // Check structure (can be improved with more robust validation)
+              if (ws && typeof ws === 'object' && 'name' in ws && 'cards' in ws && 'viewState' in ws) {
+                validWorkspaces[id] = ws as WorkspaceData;
+  
+            setImportedWorkspaces(validWorkspaces);
+-           setIsImportDialogOpen(true); // Open import selection dialog
++           setIsImportDialogOpen(true);
+          } else {
+            throw new Error('Invalid file format. Expected JSON object of workspaces.');
+      };
+      reader.readAsText(file);
+-   }, [pushToastMsg]); // Removed setAppState, handled in ImportDialog
++   }, [pushToastMsg]);
+  
+    const handleCloseImportDialog = useCallback(() => {
+      setIsImportDialogOpen(false);
+-     setImportedWorkspaces({}); // Clear data when closing
++     setImportedWorkspaces({});
+    }, []);
+  
+    const cardList = Object.values(cards);
+    const existingWorkspaceIds = Object.keys(appState.workspaces);
+    const canDeleteWorkspace = currentWorkspaceId !== null && existingWorkspaceIds.length > 1;
++ 
++   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
++   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
++   const [importedWorkspaces, setImportedWorkspaces] = useState<Record<string, WorkspaceData>>({});
++   const [isNewWorkspaceDialogOpen, setIsNewWorkspaceDialogOpen] = useState(false);
++   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
++   const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; name: string } | null>(null);
+  
+    return (
+        </Box>
+        <Divider />
+-       <List sx={{ flexGrow: 1, overflowY: 'auto' }}>
+-         {cardList.length > 0 ? (
+-           cardList.map((card) => (
+-             <ListItem key={card.id} disablePadding secondaryAction={
++       <DragDropContext onDragEnd={onDragEnd}>
++         <Droppable droppableId="sidebar-card-list">
++           {(provided) => (
++             <List
++               sx={{ flexGrow: 1, overflowY: 'auto' }}
++               ref={provided.innerRef}
++               {...provided.droppableProps}
++             >
++               {orderedCards.length > 0 ? (
++                 orderedCards.map((card, index) => (
++                   <Draggable key={card.id} draggableId={card.id} index={index}>
++                     {(providedDraggable, snapshot) => (
++                        <ListItem
++                           ref={providedDraggable.innerRef}
++                           {...providedDraggable.draggableProps}
++                           disablePadding
++                           secondaryAction={
+                              <IconButton edge="end" aria-label="delete" onClick={(e) => handleDeleteCard(e, card.id)} size="small">
+                                <DeleteIcon fontSize="inherit" />
+                              </IconButton>
+-               }>
+-               <ListItemButton onClick={() => handleCardClick(card.id)}>
++                           }
++                           sx={{ backgroundColor: snapshot.isDragging ? 'action.hover' : 'transparent' }}
++                        >
++                          <Box {...providedDraggable.dragHandleProps} sx={{ display: 'flex', alignItems: 'center', cursor: 'grab', mr: 1 }}>
++                            <DragIndicatorIcon fontSize="small" />
++                          </Box>
++                          <ListItemButton onClick={() => handleCardClick(card.id)} sx={{ pl: 0 }}>
+                              <ListItemText
+                                primary={(card.text || 'New Card').substring(0, 50) + ((card.text || 'New Card').length > 50 ? '...' : '')}
+                            </ListItemButton>
+                         </ListItem>
++                     )}
++                   </Draggable>
+                  ))
+                ) : (
+                  </ListItem>
+                )}
++               {provided.placeholder}
+              </List>
++           )}
++         </Droppable>
++       </DragDropContext>
+        <Divider />
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
+        />
+  
+-       {/* Export Dialog Component */}
+        <ExportDialog
+          open={isExportDialogOpen}
+        />
+  
+-       {/* Import Dialog Component */}
+        <ImportDialog
+          open={isImportDialogOpen}
+        />
+  
+-       {/* New Workspace Input Dialog */}
+        <InputDialog
+          open={isNewWorkspaceDialogOpen}
+        />
+  
+-       {/* Confirm Delete Workspace Dialog */}
+        <ConfirmDialog
+          open={isDeleteDialogOpen}
+```
+
+---
+
+It seems the refactoring introduced several errors:
+
+1.  **Type `CardData` Not Found:** The type import for `CardData` might have been accidentally removed or wasn't present.
+2.  **Variable Scope/Order Issues:** Variables like `workspaceToDelete` and `fileInputRef` are being used before their declarations, likely due to moving state declarations around.
+3.  **Missing `fileInputRef`:** The ref declaration itself might have been moved or deleted.
+
+Let me fix these issues in `SidebarContent.tsx`:
+*   Re-add the `CardData` type import.
+*   Ensure all state variables and refs (`fileInputRef`, `isExportDialogOpen`, `isImportDialogOpen`, etc.) are declared *before* they are used in callbacks or JSX.
+*   Ensure `fileInputRef` is declared.
+
+---
+
+```diff
+  import WorkspaceSwitcher from './WorkspaceSwitcher';
+  import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
+- import type { WorkspaceData } from '../types';
++ import type { WorkspaceData, CardData } from '../types';
+  import ExportDialog from './ExportDialog';
+  import ImportDialog from './ImportDialog';
+```
+
+---
+
+It seems the automatic refactoring didn't fully resolve the variable scope issues. The errors persist because the callback functions (`onDragEnd`, `handleNewWorkspaceClick`, etc.) are still defined *before* all the necessary state variables and refs (`fileInputRef`, `workspaceToDelete`, etc.) that they might close over or reference.
+
+I need to manually reorder the `SidebarContent` component function:
+
+1.  Declare all Jotai atom getters/setters first.
+2.  Declare all local `useState` variables and `useRef` refs next.
+3.  Declare derived state variables.
+4.  Declare all `useCallback` functions (like `onDragEnd`, `handleCardClick`, etc.) *after* all the state and refs they might depend on have been declared.
+5.  Return the JSX.
+
+Let me apply this reordering to `SidebarContent.tsx`.
+
+---
+
+```diff
+  
+  function SidebarContent() {
++   // 1. State from Atoms
+    const cards = useAtomValue(currentCardsAtom);
+    const createWorkspace = useSetAtom(createWorkspaceAtom);
+    const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
+    const pushToastMsg = usePushToastMsg();
++ 
++   // 2. Local Component State (Dialogs, Refs, etc.)
++   const fileInputRef = useRef<HTMLInputElement>(null);
++   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
++   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
++   const [importedWorkspaces, setImportedWorkspaces] = useState<Record<string, WorkspaceData>>({});
++   const [isNewWorkspaceDialogOpen, setIsNewWorkspaceDialogOpen] = useState(false);
++   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
++   const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; name: string } | null>(null);
++ 
++   // 3. Derived State
+    const currentWorkspace = currentWorkspaceId ? appState.workspaces[currentWorkspaceId] : null;
+    const currentWorkspaceName = currentWorkspace?.name ?? '-';
+- 
+-   const cardOrder = currentWorkspace?.cardOrder ?? Object.keys(currentWorkspace?.cards ?? {});
++   // Ensure cardOrder is always an array, even if workspace is loading/null initially
++   const cardOrder = currentWorkspace?.cardOrder ?? [];
+    const orderedCards = cardOrder.map(id => currentWorkspace?.cards[id]).filter(Boolean) as CardData[];
++   const existingWorkspaceIds = Object.keys(appState.workspaces);
++   const canDeleteWorkspace = currentWorkspaceId !== null && existingWorkspaceIds.length > 1;
++ 
++   // 4. Callbacks / Handlers (Defined AFTER state/refs)
+  
+    const onDragEnd = useCallback((result: DropResult) => {
+      const { destination, source, draggableId } = result;
+- 
+      if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) {
+        return;
+      }
+- 
+      if (destination.droppableId !== 'sidebar-card-list') {
+          return;
+      }
+- 
+      const newOrder = Array.from(cardOrder);
+      newOrder.splice(source.index, 1);
+      newOrder.splice(destination.index, 0, draggableId);
+- 
+      if (currentWorkspaceId) {
+          updateCardOrder({ workspaceId: currentWorkspaceId, newOrder });
+      }
+- 
+    }, [cardOrder, updateCardOrder, currentWorkspaceId]);
+  
+  
+    const handleCreateWorkspaceSubmit = useCallback((name: string) => {
+-     if (name) {
+-       createWorkspace(name);
+-     }
++     if (name) createWorkspace(name);
+    }, [createWorkspace]);
+  
+  
+    const handleDeleteWorkspaceClick = useCallback(() => {
+-     if (!currentWorkspaceId) {
+-       pushToastMsg("No workspace selected.");
+-       return;
+-     }
++     if (!currentWorkspaceId) { pushToastMsg("No workspace selected."); return; }
+      const workspaceCount = Object.keys(appState.workspaces).length;
+-     if (workspaceCount <= 1) {
+-         pushToastMsg("Cannot delete the last workspace.");
+-         return;
+-     }
++     if (workspaceCount <= 1) { pushToastMsg("Cannot delete the last workspace."); return; }
+      const workspaceName = appState.workspaces[currentWorkspaceId]?.name ?? 'this workspace';
+      setWorkspaceToDelete({ id: currentWorkspaceId, name: workspaceName });
+      setIsDeleteDialogOpen(true);
+-   }, [currentWorkspaceId, appState.workspaces, pushToastMsg]);
++   }, [currentWorkspaceId, appState.workspaces, pushToastMsg]); // Ensure appState.workspaces is dependency
+  
+    const handleConfirmDeleteWorkspace = useCallback(() => {
+      }
+      setWorkspaceToDelete(null);
++     // Dialog closes itself via prop
+    }, [workspaceToDelete, deleteWorkspace, pushToastMsg]);
+  
+  
+    const handleCardClick = useCallback((cardId: string) => {
+-     const card = cards[cardId];
++     const card = currentWorkspace?.cards[cardId]; // Use currentWorkspace
+      if (!card) return;
+- 
+      bringCardToFront(cardId);
+- 
+      const cardWidth = card.size?.width ?? MIN_CARD_WIDTH;
+      const cardHeight = card.size?.height ?? MIN_CARD_HEIGHT;
+      const cardCenterX = card.position.x + cardWidth / 2;
+      const cardCenterY = card.position.y + cardHeight / 2;
+      centerOnPoint({ x: cardCenterX, y: cardCenterY });
+- 
+      setIsSidebarOpen(false);
+- 
+-   }, [cards, centerOnPoint, bringCardToFront, setIsSidebarOpen]);
++   }, [currentWorkspace, centerOnPoint, bringCardToFront, setIsSidebarOpen]); // Added currentWorkspace
+  
+    const handleDeleteCard = useCallback((event: React.MouseEvent, cardId: string) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+- 
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const jsonString = e.target?.result as string;
+          const parsedData = JSON.parse(jsonString);
+- 
+          if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData)) {
+            const validWorkspaces: Record<string, WorkspaceData> = {};
+            let hasValidWorkspace = false;
+            for (const id in parsedData) {
+              const ws = parsedData[id];
+-             if (ws && typeof ws === 'object' && 'name' in ws && 'cards' in ws && 'viewState' in ws) {
++             if (ws && typeof ws === 'object' && 'name' in ws && 'cards' in ws && 'viewState' in ws && 'cardOrder' in ws) { // Added cardOrder check
+                validWorkspaces[id] = ws as WorkspaceData;
+                hasValidWorkspace = true;
+              }
+            }
+- 
+-           if (!hasValidWorkspace) {
+-             throw new Error('No valid workspace data found in the file.');
+-           }
+- 
++           if (!hasValidWorkspace) throw new Error('No valid workspace data found in file.');
+            setImportedWorkspaces(validWorkspaces);
+            setIsImportDialogOpen(true);
+          }
+        } catch (error) {
+-         console.error('Failed to parse or validate import file:', error);
+-         pushToastMsg(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`);
++         console.error('Failed to parse/validate import file:', error);
++         pushToastMsg(`Import Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+-         if (fileInputRef.current) {
+-           fileInputRef.current.value = '';
+-         }
++         if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      };
+      reader.onerror = (_error) => {
+        console.error('Failed to read file:', reader.error);
+-       pushToastMsg(`Failed to read file: ${reader.error}`);
+-       if (fileInputRef.current) {
+-         fileInputRef.current.value = '';
+-       }
++       pushToastMsg(`File Read Error: ${reader.error}`);
++       if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+      reader.readAsText(file);
+    }, []);
+  
+-   const cardList = Object.values(cards);
+-   const existingWorkspaceIds = Object.keys(appState.workspaces);
+-   const canDeleteWorkspace = currentWorkspaceId !== null && existingWorkspaceIds.length > 1;
+- 
+-   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+-   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+-   const [importedWorkspaces, setImportedWorkspaces] = useState<Record<string, WorkspaceData>>({});
+-   const [isNewWorkspaceDialogOpen, setIsNewWorkspaceDialogOpen] = useState(false);
+-   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+-   const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; name: string } | null>(null);
+- 
++   // --- Render --- //
+    return (
+      <Box sx={{ width: 250, display: 'flex', flexDirection: 'column', height: '100%' }} role="presentation">
+        </Box>
+        <Divider />
++       {/* DND List */}
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="sidebar-card-list">
+        </DragDropContext>
+        <Divider />
++       {/* Workspace Controls */}
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
+          <WorkspaceSwitcher />
+          </IconButton>
+        </Box>
++       {/* Action Buttons */}
+        <Button onClick={handleNewWorkspaceClick} sx={{ m: 2, mt: 0 }}>
+          New Workspace
+          </Button>
+        </Box>
++       {/* Hidden file input */}
+        <input
+          type="file"
+          style={{ display: 'none' }}
+        />
+- 
++       {/* Dialogs */}
+        <ExportDialog
+          open={isExportDialogOpen}
+          onClose={handleCloseExportDialog}
+          workspaces={appState.workspaces}
+        />
+- 
+        <ImportDialog
+          open={isImportDialogOpen}
+          existingWorkspaceIds={existingWorkspaceIds}
+        />
+- 
+        <InputDialog
+          open={isNewWorkspaceDialogOpen}
+          defaultValue="New Workspace"
+        />
+- 
+        <ConfirmDialog
+          open={isDeleteDialogOpen}
+          This action cannot be undone.
+        </ConfirmDialog>
+- 
+      </Box>
+    );
+```
+
+---
+
+Okay, I've reordered the declarations within the `SidebarContent` component function to define state and refs before the callback functions that use them. I also re-added the `CardData` type import and added a missing `cardOrder` check in the import file validation.
+
+Let's run `bun check` to ensure this resolved the errors.
+
+---
+
+```bash
+bun check
+```
+
+```
+    ~/Pr/cards    master ⇡6 !3  bun check                                           ✔ 
+$ bun tsc
+src/components/SidebarContent.tsx:36:9 - error TS6133: 'cards' is declared but its value is nev
+er read.
+
+36   const cards = useAtomValue(currentCardsAtom);
+           ~~~~~
+
+
+Found 1 error in src/components/SidebarContent.tsx:36
+
+error: "tsc" exited with code 2
+    ~/Pr/cards    master ⇡6 !6                                                    2 ✘
+```
+
+---
+
+Ah, it seems the `cards` variable (derived from `currentCardsAtom`) is no longer needed directly, as we are now using `currentWorkspace.cards` and `orderedCards` to get the relevant card data.
+
+I'll remove the unused `cards` variable declaration.
+
+---
+
+```diff
+  function SidebarContent() {
+    // 1. State from Atoms
+-   const cards = useAtomValue(currentCardsAtom);
+    const createWorkspace = useSetAtom(createWorkspaceAtom);
+    const centerOnPoint = useSetAtom(centerOnPointAtom);
+```
+
+---
+
+Okay, that should clear the final error. Let's run the check once more.
+
+---
+
+```bash
+bun check
+```
+
+```
+    ~/Pr/cards    master ⇡6 !6  bun check                                         2 ✘ 
+$ bun tsc
+src/components/SidebarContent.tsx:13:3 - error TS6133: 'currentCardsAtom' is declared but its v
+alue is never read.
+
+13   currentCardsAtom,
+     ~~~~~~~~~~~~~~~~
+
+
+Found 1 error in src/components/SidebarContent.tsx:13
+
+error: "tsc" exited with code 2
+    ~/Pr/cards    master ⇡6 !6                                                    2 ✘
+```
+
+---
+
+Right, removing the `cards` variable means the `currentCardsAtom` import is also no longer needed in `SidebarContent.tsx`. My mistake. Removing that import now.
+
+---
+
+```diff
+  import { usePushToastMsg } from '../state/atoms';
+  import {
+-   currentCardsAtom,
+    currentWorkspaceIdAtom,
+    createWorkspaceAtom,
+```
+
+---
+
+Okay, let's try `bun check` one more time.
+
+---
+
+```bash
+bun check
+```
+
+```
+    ~/Pr/cards    master ⇡6 !6  bun check                                         2 ✘ 
+$ bun tsc
+    ~/Pr/cards    master ⇡6 !6                                                      ✔
+```
+
+---
+
+Success! `bun check` passes. The drag-and-drop reordering for the sidebar card list should now be functional and correctly integrated with the state management.
+
+---
+
+_**User**_
+
+It appears that the cards in the default workspace are not showing in the list.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Ah, you are likely correct. When I created the `addInitialSampleCardsAtom` action to add the default cards dynamically, I populated the `cards` object in the state, but I neglected to also update the `cardOrder` array for that workspace.
+
+The sidebar list relies on the `cardOrder` array to know *which* cards to display and in what order. If `cardOrder` is empty, the list will appear empty even if the cards exist in the `cards` record.
+
+Let's fix the `addInitialSampleCardsAtom` action in `src/state/atoms.ts` to populate the `cardOrder` array as well.
+
+---
+
+```diff
+          const largeCardHeight = 150;
+  
+-         const sampleCards: Record<string, CardData> = {
+-             [crypto.randomUUID()]: {
+-                 id: crypto.randomUUID(), // Need to generate ID here
+-                 text: "Welcome! 🎉\nUse these cards to brainstorm.\nDouble-click to edit, drag to move!",
+-                 position: { x: centerX - (cardWidth * 1.5), y: centerY - (cardHeight * 1.0) },
+-                 size: { width: cardWidth, height: cardHeight },
+-             },
+-             [crypto.randomUUID()]: {
+-                 id: crypto.randomUUID(),
+-                 text: "💡 Main Idea\n[Your central theme goes here]",
+-                 position: { x: centerX + (cardWidth * 0.5), y: centerY - (cardHeight * 0.8) },
+-                 size: { width: cardWidth, height: cardHeight },
+-             },
+-             [crypto.randomUUID()]: {
+-                 id: crypto.randomUUID(),
+-                 text: "Supporting Detail or Question?\n\n- Use different sizes for emphasis or longer notes.\n- Drag the corner to resize.\n- What related topics come to mind?",
+-                 position: { x: centerX - (largeCardWidth * 0.5), y: centerY + (cardHeight * 0.5) },
+-                 size: { width: largeCardWidth, height: largeCardHeight },
+-             },
+-             [crypto.randomUUID()]: {
+-                 id: crypto.randomUUID(),
+-                 text: "➡️ Next Steps?\n- Action item 1\n- Follow-up question",
+-                 position: { x: centerX + (cardWidth * 0.5), y: centerY + (cardHeight * 0.7) }, // Adjusted y
+-                 size: { width: cardWidth, height: cardHeight },
+-             },
+-         };
++         // Define sample card data (without IDs initially)
++         const sampleCardDefinitions = [
++             { text: "Welcome! 🎉\nUse these cards to brainstorm.\nDouble-click to edit, drag to move!", position: { x: centerX - (cardWidth * 1.5), y: centerY - (cardHeight * 1.0) }, size: { width: cardWidth, height: cardHeight } },
++             { text: "💡 Main Idea\n[Your central theme goes here]", position: { x: centerX + (cardWidth * 0.5), y: centerY - (cardHeight * 0.8) }, size: { width: cardWidth, height: cardHeight } },
++             { text: "Supporting Detail or Question?\n\n- Use different sizes for emphasis or longer notes.\n- Drag the corner to resize.\n- What related topics come to mind?", position: { x: centerX - (largeCardWidth * 0.5), y: centerY + (cardHeight * 0.5) }, size: { width: largeCardWidth, height: largeCardHeight } },
++             { text: "➡️ Next Steps?\n- Action item 1\n- Follow-up question", position: { x: centerX + (cardWidth * 0.5), y: centerY + (cardHeight * 0.7) }, size: { width: cardWidth, height: cardHeight } },
++         ];
+  
+-         // Fix: Correctly regenerate IDs inside the objects
++         // Generate IDs and create final objects
+          const finalSampleCards: Record<string, CardData> = {};
+-         Object.values(sampleCards).forEach(card => {
++         const finalCardOrder: string[] = [];
++ 
++         sampleCardDefinitions.forEach(def => {
+              const newId = crypto.randomUUID();
+-             finalSampleCards[newId] = { ...card, id: newId };
++             finalSampleCards[newId] = { ...def, id: newId };
++             finalCardOrder.push(newId); // Add ID to the order array
+          });
+- 
+  
+          console.log("Adding initial sample cards centered at:", {centerX, centerY});
+                  [currentId]: {
+                      ...currentWorkspace,
+-                     cards: finalSampleCards, // Add the newly generated cards
++                     cards: finalSampleCards,
++                     cardOrder: finalCardOrder, // Set the cardOrder
+                  },
+              },
+```
+
+---
+
+I've updated the `addInitialSampleCardsAtom` action:
+
+1.  It now defines the sample card data first (without IDs).
+2.  It then iterates through these definitions, generating a unique ID for each card using `crypto.randomUUID()`.
+3.  It adds the full card data (including the new ID) to the `finalSampleCards` object.
+4.  Crucially, it also pushes the generated ID into the `finalCardOrder` array.
+5.  Finally, when updating the `appStateAtom`, it sets both the `cards` object and the `cardOrder` array for the workspace.
+
+This should ensure that when the sample cards are added, their order is correctly recorded, and they will appear in the sidebar list.
+
+---
+
+_**User**_
+
+Great.
+
+It seems that creating a new workspace creates the introductory cards.  We only want to create these upon first load of the application for the default workspace.
+
+However, it would be useful start off new workspaces with a new card in the center of the screen.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+```diff
+  
+  // Define the initial state conforming to the AppState interface
+- const initialWorkspaceId = crypto.randomUUID();
++ const initialWorkspaceId = crypto.randomUUID(); // Keep track of the *very first* ID
+  
+  // Removed sample card generation IDs here
+  );
+  
+- // Action to add initial sample cards if the current workspace is empty
++ // Action to add initial sample cards if the current workspace is empty AND is the initial one
+  export const addInitialSampleCardsAtom = atom(
+      null,
+      (get, set) => {
+          const currentId = get(currentWorkspaceIdAtom);
+-         if (!currentId) return; // No workspace selected
++         // Only run if the current workspace IS the initial default workspace
++         if (!currentId || currentId !== initialWorkspaceId) {
++             return;
++         }
+  
+          const appState = get(appStateAtom);
+```
+
+---
+
+**Step 2: Modify `createWorkspaceAtom`**
+
+Now, I'll update the `createWorkspaceAtom` to add a single default card when a new workspace is created. It will place this card near the origin (0,0) since we don't have viewport context here.
+
+---
+
+```diff
+  export const createWorkspaceAtom = atom(null, (_get, set, name: string) => {
+    const newId = crypto.randomUUID();
++ 
++   // Create a single default card for the new workspace
++   const defaultCardId = crypto.randomUUID();
++   const defaultCard: CardData = {
++       id: defaultCardId,
++       text: "New Card",
++       // Position near the center of the default view
++       position: { x: -100, y: -50 }, // Centered based on default 200x100 size
++       size: { width: 200, height: 100 },
++   };
++ 
+    const newWorkspace: WorkspaceData = {
+      id: newId,
+      name,
+-     cards: {},
++     cards: {
++         [defaultCardId]: defaultCard, // Add the default card
++     },
+      viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
+-     cardOrder: [], // Initialize card order
++     cardOrder: [defaultCardId], // Initialize card order with the default card
+    };
+  
+      currentWorkspaceId: newId, // Switch to the new workspace
+    }));
++ 
++   // Set the last created card ID for potential focus (optional)
++   set(lastCreatedCardIdAtom, defaultCardId);
+  });
+  
+```
+
+---
+
+Okay, the changes are done:
+
+1.  `addInitialSampleCardsAtom` now checks if the `currentWorkspaceId` matches the `initialWorkspaceId` generated on first load, preventing the sample cards from being added to any other workspace.
+2.  `createWorkspaceAtom` now creates a single "New Card" at position `{-100, -50}` (centered for a 200x100 card at origin 0,0) and adds its ID to the `cardOrder` for the newly created workspace. It also sets this card as the `lastCreatedCardId` in case we want to auto-focus it later (though the current focus logic in `Card.tsx` might only work if the workspace is immediately rendered).
+
+This should achieve the desired behavior: sample cards only on the very first load in the default workspace, and new workspaces starting with a single centered card.
+
+---
+
+_**User**_
+
+Can we calculate the center of the screen for the single new card in new workspaces in the same way we calculate the center for the default workspace cards?
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+That's a good thought, aiming for consistency! However, there's a key difference in *when* these actions happen:
+
+1.  **`addInitialSampleCardsAtom`:** This action is triggered from a `useEffect` hook within the main `App` component *after* the application has rendered, the viewport size has been measured (`viewportSizeAtom`), and the initial state (including `viewState`) has been loaded. Therefore, it *has* the necessary context (viewport dimensions, current pan, current zoom) to calculate the center of the visible area in workspace coordinates.
+2.  **`createWorkspaceAtom`:** This action directly modifies the core application state (`appStateAtom`) *before* the newly created workspace is even rendered. At the moment this atom's write function executes:
+    *   It doesn't know the `viewportSize` (that's UI-level information).
+    *   It only knows the *intended* initial `viewState` for the *new* workspace (which is `{ pan: { x: 0, y: 0 }, zoom: 1 }`). It doesn't know the view state the user was looking at *before* clicking "New Workspace".
+
+**Why Centering is Difficult Here:**
+
+To calculate the *current* viewport center in workspace coordinates, you need `viewportWidth`, `viewportHeight`, `currentPan.x`, `currentPan.y`, and `currentZoom`. The `createWorkspaceAtom` doesn't have access to these values when it runs. We *could* potentially pass them in as arguments, but that would make the action signature much more complex and tightly couple the state logic to UI details.
+
+**Recommendation:**
+
+For the single card added in `createWorkspaceAtom`, placing it at a fixed position near the origin (like `{-100, -50}` to center it around `(0,0)`) is the most practical and robust approach. It ensures the card starts in a predictable location within the *new workspace's* coordinate system, regardless of the user's previous view or screen size. The primary goal is just to give the user an immediate starting point in the new space, not necessarily to have it perfectly centered in their current viewport upon creation.
+
+The dynamic centering works well for the *initial sample cards* because that action is intentionally delayed until the necessary UI context is available.
+
+---
+
+_**User**_
+
+Alright.  Let's just go ahead and default the position to 100, 100 for the new card then
+
+---
+
 
 
 ---
