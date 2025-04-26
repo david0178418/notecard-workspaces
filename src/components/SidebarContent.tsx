@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   Box, List, ListItem, ListItemButton, ListItemText, Divider, Button, Typography,
+  IconButton
 } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/DeleteForever';
 import { useAtomValue, useSetAtom, useAtom } from 'jotai';
 import { usePushToastMsg } from '../state/atoms';
 import {
@@ -11,6 +13,7 @@ import {
   centerOnPointAtom,
   sidebarOpenAtom,
   appStateAtom,
+  deleteCardAtom,
 } from '../state/atoms';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
@@ -24,6 +27,7 @@ function SidebarContent() {
   const centerOnPoint = useSetAtom(centerOnPointAtom);
   const setIsSidebarOpen = useSetAtom(sidebarOpenAtom);
   const [appState] = useAtom(appStateAtom);
+  const deleteCard = useSetAtom(deleteCardAtom);
   const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
   const pushToastMsg = usePushToastMsg();
   const currentWorkspaceName = currentWorkspaceId ? appState.workspaces[currentWorkspaceId]?.name : '-';
@@ -58,6 +62,11 @@ function SidebarContent() {
     setIsSidebarOpen(false);
 
   }, [cards, centerOnPoint, setIsSidebarOpen]);
+
+  const handleDeleteCard = useCallback((event: React.MouseEvent, cardId: string) => {
+    event.stopPropagation();
+    deleteCard(cardId);
+  }, [deleteCard]);
 
   // --- Export Logic ---
   const handleExportClick = useCallback(() => {
@@ -144,10 +153,15 @@ function SidebarContent() {
       <List sx={{ flexGrow: 1, overflowY: 'auto' }}>
         {cardList.length > 0 ? (
           cardList.map((card) => (
-            <ListItem key={card.id} disablePadding>
+            <ListItem key={card.id} disablePadding secondaryAction={
+                <IconButton edge="end" aria-label="delete" onClick={(e) => handleDeleteCard(e, card.id)} size="small">
+                  <DeleteIcon fontSize="inherit" />
+                </IconButton>
+              }>
               <ListItemButton onClick={() => handleCardClick(card.id)}>
                 <ListItemText
                   primary={(card.text || 'New Card').substring(0, 50) + ((card.text || 'New Card').length > 50 ? '...' : '')}
+                  sx={{ pr: 1 }}
                 />
               </ListItemButton>
             </ListItem>

@@ -11303,6 +11303,18 @@ New cards created via double-click or the FAB should now appear centered on the 
 
 ---
 
+_**User**_
+
+Add the ability to delete cards from the side bar.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
 
 
 ---
