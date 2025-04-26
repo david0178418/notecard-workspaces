@@ -17,18 +17,20 @@ function ImportDialog({ open, onClose, workspacesToImport, existingWorkspaceIds 
   const [selection, setSelection] = useState<Record<string, boolean>>({});
   const setAppState = useSetAtom(appStateAtom);
   const pushToastMsg = usePushToastMsg();
-  const workspaceList = Object.values(workspacesToImport);
 
   // Initialize selection when dialog opens or imported data changes
   useEffect(() => {
     if (open) {
       const initialSelection: Record<string, boolean> = {};
-      workspaceList.forEach(ws => {
+      // Derive workspaceList inside the effect
+      const currentWorkspaceList = Object.values(workspacesToImport);
+      currentWorkspaceList.forEach(ws => {
         initialSelection[ws.id] = true; // Default select all
       });
       setSelection(initialSelection);
     }
-  }, [open, workspaceList]);
+    // Depend on the prop itself, not the derived list
+  }, [open, workspacesToImport]);
 
   const handleSelectionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setSelection(prev => ({
@@ -80,12 +82,15 @@ function ImportDialog({ open, onClose, workspacesToImport, existingWorkspaceIds 
     onClose(); // Close dialog via callback
   }, [workspacesToImport, selection, setAppState, pushToastMsg, onClose]);
 
+  // Use workspacesToImport directly for rendering the list
+  const workspaceListForRender = Object.values(workspacesToImport);
+
   return (
     <Dialog open={open} onClose={onClose}>
       <DialogTitle>Select Workspaces to Import</DialogTitle>
       <DialogContent>
         <List>
-          {workspaceList.map((ws) => {
+          {workspaceListForRender.map((ws) => {
             const exists = existingWorkspaceIds.includes(ws.id);
             return (
               <ListItem key={ws.id} disablePadding>
@@ -103,11 +108,11 @@ function ImportDialog({ open, onClose, workspacesToImport, existingWorkspaceIds 
             );
           })}
         </List>
-        {workspaceList.length === 0 && <Typography>No valid workspaces found in the file.</Typography>}
+        {workspaceListForRender.length === 0 && <Typography>No valid workspaces found in the file.</Typography>}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleConfirmImport} disabled={workspaceList.length === 0 || !Object.values(selection).some(v => v)}>Import Selected</Button>
+        <Button onClick={handleConfirmImport} disabled={workspaceListForRender.length === 0 || !Object.values(selection).some(v => v)}>Import Selected</Button>
       </DialogActions>
     </Dialog>
   );

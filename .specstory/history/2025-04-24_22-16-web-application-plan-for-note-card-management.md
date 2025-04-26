@@ -13313,6 +13313,61 @@ Alright.  Let's just go ahead and default the position to 100, 100 for the new c
 
 ---
 
+_**Assistant**_
+
+
+
+---
+
+Okay, I'll update the `createWorkspaceAtom` in `src/state/atoms.ts` to set the default card's position to `{ x: 100, y: 100 }`.
+
+---
+
+```diff
+        id: defaultCardId,
+        text: "New Card",
+-       // Position near the center of the default view
+-       position: { x: -100, y: -50 }, // Centered based on default 200x100 size
++       // Position at 100, 100
++       position: { x: 100, y: 100 },
+        size: { width: 200, height: 100 },
+    };
+      name,
+      cards: {
+-         [defaultCardId]: defaultCard, // Add the default card
++         [defaultCardId]: defaultCard,
+      },
+      viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
+-     cardOrder: [defaultCardId], // Initialize card order with the default card
++     cardOrder: [defaultCardId],
+    };
+  
+```
+
+---
+
+Done. The default position for the single card created in a new workspace is now set to `{ x: 100, y: 100 }`.
+
+---
+
+_**User**_
+
+The import dialog has this error message in the log. It seems to be working otherwise:
+
+```
+ImportDialog.tsx:26 Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+(anonymous)	@	ImportDialog.tsx:26
+```
+
+
+---
+
+_**Assistant**_
+
+
+
+---
+
 
 
 ---
