@@ -19,13 +19,16 @@ const getSystemTheme = (): ThemeMode => {
 };
 
 // Define the initial state conforming to the AppState interface
-const initialWorkspaceId = crypto.randomUUID(); // Use crypto.randomUUID()
+const initialWorkspaceId = crypto.randomUUID();
+
+// Removed sample card generation IDs here
+
 const initialAppState: AppState = {
   workspaces: {
     [initialWorkspaceId]: {
       id: initialWorkspaceId,
       name: 'Default Workspace',
-      cards: {},
+      cards: {}, // Start with an empty cards object
       viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
     },
   },
@@ -423,6 +426,91 @@ export const bringCardToFrontAtom = atom(
     const newOrder = currentOrder.filter(id => id !== cardId).concat(cardId);
     set(interactionOrderAtom, newOrder);
   }
+);
+
+// Action to add initial sample cards if the current workspace is empty
+export const addInitialSampleCardsAtom = atom(
+    null,
+    (get, set) => {
+        const currentId = get(currentWorkspaceIdAtom);
+        if (!currentId) return; // No workspace selected
+
+        const appState = get(appStateAtom);
+        const currentWorkspace = appState.workspaces[currentId];
+
+        // Only proceed if the workspace exists and has NO cards
+        if (!currentWorkspace || Object.keys(currentWorkspace.cards).length > 0) {
+            return;
+        }
+
+        const viewportSize = get(viewportSizeAtom);
+        const viewState = currentWorkspace.viewState; // Use the specific workspace's view state
+
+        // Ensure viewport has been measured
+        if (viewportSize.width === 0 || viewportSize.height === 0) {
+            console.warn("Viewport size not available yet for sample card positioning.");
+            return;
+        }
+
+        // Calculate viewport center in workspace coordinates
+        const centerX = (viewportSize.width / 2 - viewState.pan.x) / viewState.zoom;
+        const centerY = (viewportSize.height / 2 - viewState.pan.y) / viewState.zoom;
+
+        // Define sample cards relative to the center
+        const cardWidth = 200;
+        const cardHeight = 100;
+        const largeCardWidth = 250;
+        const largeCardHeight = 150;
+
+        const sampleCards: Record<string, CardData> = {
+            [crypto.randomUUID()]: {
+                id: crypto.randomUUID(), // Need to generate ID here
+                text: "Welcome! 🎉\nUse these cards to brainstorm.\nDouble-click to edit, drag to move!",
+                position: { x: centerX - (cardWidth * 1.5), y: centerY - (cardHeight * 1.0) },
+                size: { width: cardWidth, height: cardHeight },
+            },
+            [crypto.randomUUID()]: {
+                id: crypto.randomUUID(),
+                text: "💡 Main Idea\n[Your central theme goes here]",
+                position: { x: centerX + (cardWidth * 0.5), y: centerY - (cardHeight * 0.8) },
+                size: { width: cardWidth, height: cardHeight },
+            },
+            [crypto.randomUUID()]: {
+                id: crypto.randomUUID(),
+                text: "Supporting Detail or Question?\n\n- Use different sizes for emphasis or longer notes.\n- Drag the corner to resize.\n- What related topics come to mind?",
+                position: { x: centerX - (largeCardWidth * 0.5), y: centerY + (cardHeight * 0.5) },
+                size: { width: largeCardWidth, height: largeCardHeight },
+            },
+            [crypto.randomUUID()]: {
+                id: crypto.randomUUID(),
+                text: "➡️ Next Steps?\n- Action item 1\n- Follow-up question",
+                position: { x: centerX + (cardWidth * 0.5), y: centerY + (cardHeight * 0.7) }, // Adjusted y
+                size: { width: cardWidth, height: cardHeight },
+            },
+        };
+
+        // Fix: Correctly regenerate IDs inside the objects
+        const finalSampleCards: Record<string, CardData> = {};
+        Object.values(sampleCards).forEach(card => {
+            const newId = crypto.randomUUID();
+            finalSampleCards[newId] = { ...card, id: newId };
+        });
+
+
+        console.log("Adding initial sample cards centered at:", {centerX, centerY});
+
+        // Update the state
+        set(appStateAtom, (prev) => ({
+            ...prev,
+            workspaces: {
+                ...prev.workspaces,
+                [currentId]: {
+                    ...currentWorkspace,
+                    cards: finalSampleCards, // Add the newly generated cards
+                },
+            },
+        }));
+    }
 );
 
 // Example of a derived atom (we will add more later as needed)

@@ -11858,6 +11858,170 @@ Update the Import/Export buttons to not include the word "workspaces". Also, add
 
 _**Assistant**_
 
+```diff
+  } from '@mui/material';
+  import DeleteIcon from '@mui/icons-material/DeleteForever';
++ import FileUploadIcon from '@mui/icons-material/FileUpload';
++ import FileDownloadIcon from '@mui/icons-material/FileDownload';
+  import { useAtomValue, useSetAtom, useAtom } from 'jotai';
+  import { usePushToastMsg } from '../state/atoms';
+        </Button>
+        <Box sx={{ display: 'flex', justifyContent: 'space-around', p: 2, pt: 0 }}>
+-         <Button onClick={handleImportClick} size="small">
+-           Import Workspaces
++         <Button onClick={handleImportClick} size="small" startIcon={<FileUploadIcon />}>
++           Import
+          </Button>
+-         <Button onClick={handleExportClick} size="small">
+-           Export Workspaces
++         <Button onClick={handleExportClick} size="small" startIcon={<FileDownloadIcon />}>
++           Export
+          </Button>
+        </Box>
+```
+
+---
+
+Okay, I've updated the "Import Workspaces" and "Export Workspaces" buttons in `src/components/SidebarContent.tsx`:
+
+1.  Removed the word "Workspaces" from the button text.
+2.  Added a `FileUploadIcon` as the `startIcon` for the "Import" button.
+3.  Added a `FileDownloadIcon` as the `startIcon` for the "Export" button.
+
+The buttons should now be shorter and have relevant icons.
+
+---
+
+_**User**_
+
+When the user loads the app for the first time, we should start them off with some sample cards in the default workspace.
+
+Come up with a set of 3-5 cards outlining how one might want to use it for brainstorming. Ensure you illustrate with at least one card that different sizes can be used.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, adding some introductory sample cards to the default workspace is a great way to guide new users.
+
+I'll modify the `initialAppState` definition in `src/state/atoms.ts` to include 4 sample cards demonstrating basic usage and different sizes, themed around brainstorming.
+
+---
+
+```diff
+  
+  // Define the initial state conforming to the AppState interface
+- const initialWorkspaceId = crypto.randomUUID(); // Use crypto.randomUUID()
++ const initialWorkspaceId = crypto.randomUUID();
++ 
++ // Generate IDs for sample cards
++ const sampleCardId1 = crypto.randomUUID();
++ const sampleCardId2 = crypto.randomUUID();
++ const sampleCardId3 = crypto.randomUUID();
++ const sampleCardId4 = crypto.randomUUID();
++ 
+  const initialAppState: AppState = {
+    workspaces: {
+      [initialWorkspaceId]: {
+        id: initialWorkspaceId,
+        name: 'Default Workspace',
+-       cards: {},
++       // Add sample cards
++       cards: {
++           [sampleCardId1]: {
++               id: sampleCardId1,
++               text: "Welcome! 🎉\nUse these cards to brainstorm.\nDouble-click to edit, drag to move!",
++               position: { x: -150, y: -100 },
++               size: { width: 200, height: 100 },
++           },
++           [sampleCardId2]: {
++               id: sampleCardId2,
++               text: "💡 Main Idea\n[Your central theme goes here]",
++               position: { x: 100, y: -80 },
++               size: { width: 200, height: 100 },
++           },
++           [sampleCardId3]: {
++               id: sampleCardId3,
++               text: "Supporting Detail or Question?\n\n- Use different sizes for emphasis or longer notes.\n- Drag the corner to resize.\n- What related topics come to mind?",
++               position: { x: -50, y: 50 },
++               size: { width: 250, height: 150 }, // Example of a larger card
++           },
++           [sampleCardId4]: {
++               id: sampleCardId4,
++               text: "➡️ Next Steps?\n- Action item 1\n- Follow-up question",
++               position: { x: 200, y: 50 },
++               size: { width: 200, height: 100 },
++           },
++       },
+        viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
+      },
+```
+
+---
+
+I've added four sample cards to the `cards` object within the default workspace definition in `initialAppState`. These cards provide a brief welcome and instructions, suggest placeholders for ideas and actions, and include one larger card to demonstrate resizing.
+
+The next time a user loads the app with no existing data in `localStorage`, they should see these sample cards in the "Default Workspace".
+
+---
+
+_**User**_
+
+Is the pan calculated from the top left of the screen? If so, could we calculate it from the center?
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Yes, your assumption is correct. The `pan` state (`{ x, y }`) currently represents the offset of the **top-left corner** of the conceptual workspace content relative to the **top-left corner** of the viewport (the browser window area where the workspace is displayed). This value is used directly in the CSS `transform: translate(pan.x, pan.y) scale(zoom)` applied to the content wrapper.
+
+**Can it be calculated from the center?**
+
+Yes, it *is* possible to redefine the `pan` state to represent the **workspace coordinates** that are currently located at the **center of the viewport**. However, this change has several implications and adds complexity:
+
+1.  **CSS Transform Calculation:** If `pan = { x, y }` represents the workspace coordinates at the viewport center, the actual CSS `translateX` and `translateY` needed for the transform would have to be calculated dynamically based on the current `pan`, `zoom`, and importantly, the `viewportSize`:
+    *   `translateX = (viewportWidth / 2) - (pan.x * zoom)`
+    *   `translateY = (viewportHeight / 2) - (pan.y * zoom)`
+    This means the `usePanZoom` hook would need access to the `viewportSize` state atom to calculate the `contentTransform` correctly on every render or state change.
+
+2.  **Panning Logic:** The drag handling would need to be adjusted. Instead of directly applying the screen coordinate delta to the `pan`, you'd calculate the change in *workspace* coordinates (`deltaX / zoom`, `deltaY / zoom`) and *subtract* it from the current center `pan` coordinates.
+
+3.  **Zooming Logic:** The logic to keep the point under the cursor stationary becomes more complex. You'd still find the workspace coordinate under the pointer before the zoom, but calculating the *new* center `pan` coordinate required to keep that point stationary relative to the *cursor* after the zoom is less direct than calculating the required top-left offset.
+
+4.  **Adding Cards:**
+    *   Adding a card via the FAB (center of viewport) becomes: calculate the current center workspace coordinates (`pan`) and use that as the card's position.
+    *   Adding a card via double-click becomes more complex: you'd take the click's screen coordinates, convert them to the corresponding *workspace* coordinates, and then figure out how the central `pan` coordinate needs to change if *that* workspace coordinate were now at the center (which isn't the goal).
+
+5.  **Centering on Point:** This specific action *does* become simpler. You would just set the `pan` state directly to the target workspace point coordinates.
+
+**Conclusion:**
+
+While redefining `pan` to be center-based is possible, it makes the core panning, zooming, and coordinate conversion logic significantly more complex and introduces a dependency on `viewportSize` for the fundamental CSS transform calculation. The current top-left based approach aligns directly with how CSS transforms work and keeps the core interaction logic relatively simpler and more standard.
+
+Given the added complexity for limited benefit (only simplifying the `centerOnPoint` action), I'd recommend sticking with the current top-left based definition of `pan`.
+
+Did you have a specific reason for wanting the pan calculated from the center, or was it more curiosity about the implementation? Understanding your goal might reveal alternative solutions if needed.
+
+---
+
+_**User**_
+
+Yes.  The reason for the question is that the default card set introduces a problem for variable screens. Ideally, these default cards would be toward the center of the workspace.  But "center" could be different based on the device. My thought was that calculating position from the center of the screen would solve this.
+
+Perhaps we can calculate the window size when creating these cards and position them around that?
+
+---
+
+_**Assistant**_
+
 
 
 ---

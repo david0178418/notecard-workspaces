@@ -14,6 +14,7 @@ import {
   currentViewStateAtom, // Import view state
   viewportSizeAtom, // Import viewport size
   isAppStateHydratedAtom, // Import hydration state
+  addInitialSampleCardsAtom, // Import the new action atom
 } from './state/atoms';
 // import Toolbar from './components/Toolbar'; // No longer needed
 import Workspace from './components/Workspace';
@@ -29,6 +30,7 @@ function App() {
   const viewportSize = useAtomValue(viewportSizeAtom); // Get viewport size
   // Hydration state
   const [isHydrated, setIsHydrated] = useAtom(isAppStateHydratedAtom);
+  const addSampleCards = useSetAtom(addInitialSampleCardsAtom); // Get the action setter
 
   // Effect to mark state as hydrated after initial mount
   useEffect(() => {
@@ -37,6 +39,16 @@ function App() {
     // This is usually safe for client-side rendering with localStorage.
     setIsHydrated(true);
   }, [setIsHydrated]);
+
+  // Effect to add sample cards after hydration and viewport measurement
+  useEffect(() => {
+    // Only run if hydrated, a workspace is selected, and viewport is measured
+    if (isHydrated && currentWorkspaceId && viewportSize.width > 0) {
+      // The atom itself checks if the workspace is empty
+      addSampleCards();
+    }
+    // Run once after hydration + viewport measurement for the initial workspace
+  }, [isHydrated, currentWorkspaceId, viewportSize, addSampleCards]);
 
   const toggleDrawer = (open: boolean) => (event: React.KeyboardEvent | React.MouseEvent) => {
     if (
