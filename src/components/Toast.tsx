@@ -11,7 +11,7 @@ function Toast() {
 
     // Determine properties from the current message or use defaults
 	const {
-		delay = 5000, // Default delay 5 seconds
+		delay = 3_000,
 		message = '',
 		onClose = () => {},
 	} = toastMsg || {}; // Use empty object fallback if toastMsg is null
