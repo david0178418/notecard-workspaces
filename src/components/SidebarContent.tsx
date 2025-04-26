@@ -17,6 +17,7 @@ import {
   appStateAtom,
   deleteCardAtom,
   deleteWorkspaceAtom,
+  bringCardToFrontAtom,
 } from '../state/atoms';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
@@ -34,6 +35,7 @@ function SidebarContent() {
   const [appState] = useAtom(appStateAtom);
   const deleteCard = useSetAtom(deleteCardAtom);
   const deleteWorkspace = useSetAtom(deleteWorkspaceAtom);
+  const bringCardToFront = useSetAtom(bringCardToFrontAtom);
   const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
   const pushToastMsg = usePushToastMsg();
   const currentWorkspaceName = currentWorkspaceId ? appState.workspaces[currentWorkspaceId]?.name : '-';
@@ -101,17 +103,20 @@ function SidebarContent() {
     const card = cards[cardId];
     if (!card) return;
 
+    // Bring card to front first
+    bringCardToFront(cardId);
+
+    // Then calculate center and pan
     const cardWidth = card.size?.width ?? MIN_CARD_WIDTH;
     const cardHeight = card.size?.height ?? MIN_CARD_HEIGHT;
-
     const cardCenterX = card.position.x + cardWidth / 2;
     const cardCenterY = card.position.y + cardHeight / 2;
-
     centerOnPoint({ x: cardCenterX, y: cardCenterY });
 
+    // Close sidebar
     setIsSidebarOpen(false);
 
-  }, [cards, centerOnPoint, setIsSidebarOpen]);
+  }, [cards, centerOnPoint, bringCardToFront, setIsSidebarOpen]);
 
   const handleDeleteCard = useCallback((event: React.MouseEvent, cardId: string) => {
     event.stopPropagation();

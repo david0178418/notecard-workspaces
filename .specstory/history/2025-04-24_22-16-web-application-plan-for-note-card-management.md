@@ -12016,7 +12016,228 @@ _**User**_
 
 Yes.  The reason for the question is that the default card set introduces a problem for variable screens. Ideally, these default cards would be toward the center of the workspace.  But "center" could be different based on the device. My thought was that calculating position from the center of the screen would solve this.
 
-Perhaps we can calculate the window size when creating these cards and position them around that?
+Perhaps we can calculate the center based on the window size when creating these cards and position them around that?
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+You've hit on a subtle but important point! Hardcoding the initial card positions works, but it won't look centered on different screen sizes. Centering based on the *viewport* at load time is a much better approach for the default card set.
+
+My previous explanation about the complexity of centering `pan` was focused on the *ongoing* state definition. Dynamically calculating the *initial* positions is different and achievable.
+
+Here's how we can do it:
+
+1.  **Modify Initial State:** Remove the hardcoded sample cards from `initialAppState` in `src/state/atoms.ts`. The default workspace will start empty.
+2.  **Create a Dedicated Action:** Add a new action atom, let's call it `addInitialSampleCardsAtom`, in `src/state/atoms.ts`. This action will:
+    *   Get the current viewport size and view state.
+    *   Calculate the center of the viewport in workspace coordinates.
+    *   Define the sample cards with positions calculated *relative* to this center point.
+    *   Check if the current workspace is empty.
+    *   If empty, add the calculated sample cards to the current workspace's state.
+3.  **Trigger the Action:** In `App.tsx`, add a `useEffect` hook that runs *after* hydration and viewport size measurement. This effect will call the `addInitialSampleCardsAtom` action. The action atom itself will handle the logic to only add cards if the workspace is currently empty, preventing cards from being added on subsequent loads or resizes.
+
+Let's implement this.
+
+**Step 1: Modify `initialAppState` in `atoms.ts`**
+
+---
+
+```diff
+  const initialWorkspaceId = crypto.randomUUID();
+  
+- // Generate IDs for sample cards
+- const sampleCardId1 = crypto.randomUUID();
+- const sampleCardId2 = crypto.randomUUID();
+- const sampleCardId3 = crypto.randomUUID();
+- const sampleCardId4 = crypto.randomUUID();
++ // Removed sample card generation IDs here
+  
+  const initialAppState: AppState = {
+        id: initialWorkspaceId,
+        name: 'Default Workspace',
+-       // Add sample cards
+-       cards: {
+-           [sampleCardId1]: {
+-               id: sampleCardId1,
+-               text: "Welcome! 🎉\nUse these cards to brainstorm.\nDouble-click to edit, drag to move!",
+-               position: { x: -150, y: -100 },
+-               size: { width: 200, height: 100 },
+-           },
+-           [sampleCardId2]: {
+-               id: sampleCardId2,
+-               text: "💡 Main Idea\n[Your central theme goes here]",
+-               position: { x: 100, y: -80 },
+-               size: { width: 200, height: 100 },
+-           },
+-           [sampleCardId3]: {
+-               id: sampleCardId3,
+-               text: "Supporting Detail or Question?\n\n- Use different sizes for emphasis or longer notes.\n- Drag the corner to resize.\n- What related topics come to mind?",
+-               position: { x: -50, y: 50 },
+-               size: { width: 250, height: 150 }, // Example of a larger card
+-           },
+-           [sampleCardId4]: {
+-               id: sampleCardId4,
+-               text: "➡️ Next Steps?\n- Action item 1\n- Follow-up question",
+-               position: { x: 200, y: 50 },
+-               size: { width: 200, height: 100 },
+-           },
+-       },
++       cards: {}, // Start with an empty cards object
+        viewState: { pan: { x: 0, y: 0 }, zoom: 1 },
+      },
+```
+
+---
+
+**Step 2: Create `addInitialSampleCardsAtom` in `atoms.ts`**
+
+---
+
+```diff
+    }
+  );
++ 
++ // Action to add initial sample cards if the current workspace is empty
++ export const addInitialSampleCardsAtom = atom(
++     null,
++     (get, set) => {
++         const currentId = get(currentWorkspaceIdAtom);
++         if (!currentId) return; // No workspace selected
++ 
++         const appState = get(appStateAtom);
++         const currentWorkspace = appState.workspaces[currentId];
++ 
++         // Only proceed if the workspace exists and has NO cards
++         if (!currentWorkspace || Object.keys(currentWorkspace.cards).length > 0) {
++             return;
++         }
++ 
++         const viewportSize = get(viewportSizeAtom);
++         const viewState = currentWorkspace.viewState; // Use the specific workspace's view state
++ 
++         // Ensure viewport has been measured
++         if (viewportSize.width === 0 || viewportSize.height === 0) {
++             console.warn("Viewport size not available yet for sample card positioning.");
++             return;
++         }
++ 
++         // Calculate viewport center in workspace coordinates
++         const centerX = (viewportSize.width / 2 - viewState.pan.x) / viewState.zoom;
++         const centerY = (viewportSize.height / 2 - viewState.pan.y) / viewState.zoom;
++ 
++         // Define sample cards relative to the center
++         const cardWidth = 200;
++         const cardHeight = 100;
++         const largeCardWidth = 250;
++         const largeCardHeight = 150;
++ 
++         const sampleCards: Record<string, CardData> = {
++             [crypto.randomUUID()]: {
++                 id: crypto.randomUUID(), // Need to generate ID here
++                 text: "Welcome! 🎉\nUse these cards to brainstorm.\nDouble-click to edit, drag to move!",
++                 position: { x: centerX - (cardWidth * 1.5), y: centerY - (cardHeight * 1.0) },
++                 size: { width: cardWidth, height: cardHeight },
++             },
++             [crypto.randomUUID()]: {
++                 id: crypto.randomUUID(),
++                 text: "💡 Main Idea\n[Your central theme goes here]",
++                 position: { x: centerX + (cardWidth * 0.5), y: centerY - (cardHeight * 0.8) },
++                 size: { width: cardWidth, height: cardHeight },
++             },
++             [crypto.randomUUID()]: {
++                 id: crypto.randomUUID(),
++                 text: "Supporting Detail or Question?\n\n- Use different sizes for emphasis or longer notes.\n- Drag the corner to resize.\n- What related topics come to mind?",
++                 position: { x: centerX - (largeCardWidth * 0.5), y: centerY + (cardHeight * 0.5) },
++                 size: { width: largeCardWidth, height: largeCardHeight },
++             },
++             [crypto.randomUUID()]: {
++                 id: crypto.randomUUID(),
++                 text: "➡️ Next Steps?\n- Action item 1\n- Follow-up question",
++                 position: { x: centerX + (cardWidth * 0.5), y: centerY + (cardHeight * 0.7) }, // Adjusted y
++                 size: { width: cardWidth, height: cardHeight },
++             },
++         };
++ 
++         // Fix: Correctly regenerate IDs inside the objects
++         const finalSampleCards: Record<string, CardData> = {};
++         Object.values(sampleCards).forEach(card => {
++             const newId = crypto.randomUUID();
++             finalSampleCards[newId] = { ...card, id: newId };
++         });
++ 
++ 
++         console.log("Adding initial sample cards centered at:", {centerX, centerY});
++ 
++         // Update the state
++         set(appStateAtom, (prev) => ({
++             ...prev,
++             workspaces: {
++                 ...prev.workspaces,
++                 [currentId]: {
++                     ...currentWorkspace,
++                     cards: finalSampleCards, // Add the newly generated cards
++                 },
++             },
++         }));
++     }
++ );
+  
+  // Example of a derived atom (we will add more later as needed)
+```
+
+---
+
+**Step 3: Trigger Action in `App.tsx`**
+
+---
+
+```diff
+    viewportSizeAtom, // Import viewport size
+    isAppStateHydratedAtom, // Import hydration state
++   addInitialSampleCardsAtom, // Import the new action atom
+  } from './state/atoms';
+  // import Toolbar from './components/Toolbar'; // No longer needed
+    // Hydration state
+    const [isHydrated, setIsHydrated] = useAtom(isAppStateHydratedAtom);
++   const addSampleCards = useSetAtom(addInitialSampleCardsAtom); // Get the action setter
+  
+    // Effect to mark state as hydrated after initial mount
+      setIsHydrated(true);
+    }, [setIsHydrated]);
++ 
++   // Effect to add sample cards after hydration and viewport measurement
++   useEffect(() => {
++     // Only run if hydrated, a workspace is selected, and viewport is measured
++     if (isHydrated && currentWorkspaceId && viewportSize.width > 0) {
++       // The atom itself checks if the workspace is empty
++       addSampleCards();
++     }
++     // Run once after hydration + viewport measurement for the initial workspace
++   }, [isHydrated, currentWorkspaceId, viewportSize, addSampleCards]);
+  
+    const toggleDrawer = (open: boolean) => (event: React.KeyboardEvent | React.MouseEvent) => {
+```
+
+---
+
+Okay, the implementation is complete:
+
+1.  The default workspace in `initialAppState` now starts with an empty `cards` object.
+2.  The new `addInitialSampleCardsAtom` action in `atoms.ts` calculates the viewport center and generates sample cards relative to it, but only adds them if the current workspace is empty.
+3.  A `useEffect` hook in `App.tsx` calls this action once the app is hydrated and the viewport has been measured.
+
+Now, when the app loads for the first time (or with cleared local storage), the sample cards should appear dynamically centered in the viewport. Subsequent loads will use the persisted state, and the sample cards won't be added again.
+
+---
+
+_**User**_
+
+When selecting a card from the side bar, bring it to the front
 
 ---
 
