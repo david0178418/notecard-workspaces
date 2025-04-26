@@ -14,12 +14,15 @@ import {
   sidebarOpenAtom,
   appStateAtom,
   deleteCardAtom,
+  deleteWorkspaceAtom,
 } from '../state/atoms';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from './Card';
 import type { WorkspaceData } from '../types';
 import ExportDialog from './ExportDialog';
 import ImportDialog from './ImportDialog';
+import InputDialog from './InputDialog';
+import ConfirmDialog from './ConfirmDialog';
 
 function SidebarContent() {
   const cards = useAtomValue(currentCardsAtom);
@@ -28,6 +31,7 @@ function SidebarContent() {
   const setIsSidebarOpen = useSetAtom(sidebarOpenAtom);
   const [appState] = useAtom(appStateAtom);
   const deleteCard = useSetAtom(deleteCardAtom);
+  const deleteWorkspace = useSetAtom(deleteWorkspaceAtom);
   const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
   const pushToastMsg = usePushToastMsg();
   const currentWorkspaceName = currentWorkspaceId ? appState.workspaces[currentWorkspaceId]?.name : '-';
@@ -40,12 +44,56 @@ function SidebarContent() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importedWorkspaces, setImportedWorkspaces] = useState<Record<string, WorkspaceData>>({});
 
-  const handleNewWorkspace = useCallback(() => {
-    const name = prompt('Enter new workspace name:', 'New Workspace');
+  // State for New Workspace Dialog
+  const [isNewWorkspaceDialogOpen, setIsNewWorkspaceDialogOpen] = useState(false);
+
+  // State for Delete Workspace Dialog
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  const handleNewWorkspaceClick = useCallback(() => {
+    setIsNewWorkspaceDialogOpen(true); // Open the dialog
+  }, []);
+
+  const handleCreateWorkspaceSubmit = useCallback((name: string) => {
     if (name) {
       createWorkspace(name);
     }
+    // Dialog closes itself on submit
   }, [createWorkspace]);
+
+  const handleCloseNewWorkspaceDialog = useCallback(() => {
+      setIsNewWorkspaceDialogOpen(false);
+  }, []);
+
+  const handleDeleteWorkspaceClick = useCallback(() => {
+    if (!currentWorkspaceId) {
+      pushToastMsg("No workspace selected.");
+      return;
+    }
+    const workspaceCount = Object.keys(appState.workspaces).length;
+    if (workspaceCount <= 1) {
+        pushToastMsg("Cannot delete the last workspace.");
+        return;
+    }
+    const workspaceName = appState.workspaces[currentWorkspaceId]?.name ?? 'this workspace';
+    setWorkspaceToDelete({ id: currentWorkspaceId, name: workspaceName });
+    setIsDeleteDialogOpen(true); // Open confirmation dialog
+  }, [currentWorkspaceId, appState.workspaces, pushToastMsg]);
+
+  const handleConfirmDeleteWorkspace = useCallback(() => {
+    if (workspaceToDelete) {
+      deleteWorkspace(workspaceToDelete.id);
+      pushToastMsg(`Workspace "${workspaceToDelete.name}" deleted.`);
+    }
+    // Dialog closes itself on confirm
+    setWorkspaceToDelete(null); // Clear the state
+  }, [workspaceToDelete, deleteWorkspace, pushToastMsg]);
+
+  const handleCloseDeleteDialog = useCallback(() => {
+    setIsDeleteDialogOpen(false);
+    setWorkspaceToDelete(null);
+  }, []);
 
   const handleCardClick = useCallback((cardId: string) => {
     const card = cards[cardId];
@@ -141,6 +189,7 @@ function SidebarContent() {
 
   const cardList = Object.values(cards);
   const existingWorkspaceIds = Object.keys(appState.workspaces);
+  const canDeleteWorkspace = currentWorkspaceId !== null && existingWorkspaceIds.length > 1;
 
   return (
     <Box sx={{ width: 250, display: 'flex', flexDirection: 'column', height: '100%' }} role="presentation">
@@ -173,10 +222,21 @@ function SidebarContent() {
         )}
       </List>
       <Divider />
-      <Box sx={{ p: 2 }}>
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
         <WorkspaceSwitcher />
+        <IconButton
+            onClick={handleDeleteWorkspaceClick}
+            disabled={!canDeleteWorkspace}
+            size="small"
+            color="error"
+            sx={{ ml: 1 }}
+            aria-label="delete current workspace"
+            title="Delete Current Workspace"
+        >
+            <DeleteIcon fontSize="inherit" />
+        </IconButton>
       </Box>
-      <Button onClick={handleNewWorkspace} sx={{ m: 2, mt: 0 }}>
+      <Button onClick={handleNewWorkspaceClick} sx={{ m: 2, mt: 0 }}>
         New Workspace
       </Button>
       <Box sx={{ display: 'flex', justifyContent: 'space-around', p: 2, pt: 0 }}>
@@ -209,6 +269,28 @@ function SidebarContent() {
         workspacesToImport={importedWorkspaces}
         existingWorkspaceIds={existingWorkspaceIds}
       />
+
+      {/* New Workspace Input Dialog */}
+      <InputDialog
+        open={isNewWorkspaceDialogOpen}
+        onClose={handleCloseNewWorkspaceDialog}
+        onSubmit={handleCreateWorkspaceSubmit}
+        title="Create New Workspace"
+        label="Workspace Name"
+        defaultValue="New Workspace"
+      />
+
+      {/* Confirm Delete Workspace Dialog */}
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onClose={handleCloseDeleteDialog}
+        onConfirm={handleConfirmDeleteWorkspace}
+        title="Confirm Delete Workspace"
+      >
+        Are you sure you want to delete workspace "{workspaceToDelete?.name ?? ''}"?
+        This action cannot be undone.
+      </ConfirmDialog>
+
     </Box>
   );
 }

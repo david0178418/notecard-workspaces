@@ -11311,6 +11311,181 @@ Add the ability to delete cards from the side bar.
 
 _**Assistant**_
 
+Okay, I can add a delete button next to each card listed in the sidebar.
+
+Here's the plan:
+
+1.  Modify `src/components/SidebarContent.tsx`:
+    *   Import the `deleteCardAtom`.
+    *   Wrap each card's `ListItemText` and the new delete button in a `Box` with `display: 'flex'` and `alignItems: 'center'` to position them correctly.
+    *   Add an `IconButton` with a `DeleteIcon` next to the `ListItemText`.
+    *   Attach an `onClick` handler to the `IconButton` that stops event propagation (to prevent the `handleCardClick` for centering) and calls the `deleteCard` action atom with the card's ID.
+
+---
+
+```diff
+  import {
+    Box, List, ListItem, ListItemButton, ListItemText, Divider, Button, Typography,
++   IconButton
+  } from '@mui/material';
++ import DeleteIcon from '@mui/icons-material/DeleteForever';
+  import { useAtomValue, useSetAtom, useAtom } from 'jotai';
+  import { usePushToastMsg } from '../state/atoms';
+    sidebarOpenAtom,
+    appStateAtom,
++   deleteCardAtom,
+  } from '../state/atoms';
+  import WorkspaceSwitcher from './WorkspaceSwitcher';
+    const setIsSidebarOpen = useSetAtom(sidebarOpenAtom);
+    const [appState] = useAtom(appStateAtom);
++   const deleteCard = useSetAtom(deleteCardAtom);
+    const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
+    const pushToastMsg = usePushToastMsg();
+  
+    }, [cards, centerOnPoint, setIsSidebarOpen]);
++ 
++   const handleDeleteCard = useCallback((event: React.MouseEvent, cardId: string) => {
++     event.stopPropagation();
++     deleteCard(cardId);
++   }, [deleteCard]);
+  
+    // --- Export Logic ---
+          {cardList.length > 0 ? (
+            cardList.map((card) => (
+-             <ListItem key={card.id} disablePadding>
++             <ListItem key={card.id} disablePadding secondaryAction={
++                 <IconButton edge="end" aria-label="delete" onClick={(e) => handleDeleteCard(e, card.id)} size="small">
++                   <DeleteIcon fontSize="inherit" />
++                 </IconButton>
++               }>
+                <ListItemButton onClick={() => handleCardClick(card.id)}>
+                  <ListItemText
+                    primary={(card.text || 'New Card').substring(0, 50) + ((card.text || 'New Card').length > 50 ? '...' : '')}
++                   sx={{ pr: 1 }}
+                  />
+                </ListItemButton>
+```
+
+---
+
+Okay, I've updated `src/components/SidebarContent.tsx`:
+
+1.  Imported `deleteCardAtom`, `IconButton`, and `DeleteIcon`.
+2.  Got the `deleteCard` setter function from the atom.
+3.  Added a `handleDeleteCard` callback function that calls `deleteCard` and stops event propagation.
+4.  Used the `secondaryAction` prop of the `ListItem` to add an `IconButton` with the `DeleteIcon`.
+5.  Attached `handleDeleteCard` to the `onClick` of the `IconButton`.
+6.  Added a small right padding (`pr: 1`) to the `ListItemText` to prevent text from potentially overlapping with the delete icon.
+
+You should now see a delete icon next to each card in the sidebar, and clicking it should remove the corresponding card.
+
+---
+
+_**User**_
+
+Now, let's add the ability to delete workspaces
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, let's add the ability to delete the currently selected workspace. I'll add a "Delete Workspace" button in the sidebar, next to the `WorkspaceSwitcher`.
+
+1.  **Modify `SidebarContent.tsx`**:
+    *   Import the `deleteWorkspaceAtom`.
+    *   Add a `Button` next to the `WorkspaceSwitcher` within the `Box`.
+    *   Create a `handleDeleteCurrentWorkspace` callback:
+        *   It will get the `currentWorkspaceId` and the list of `workspaces`.
+        *   It will check if a workspace is selected and if there's more than one workspace (since we don't allow deleting the last one).
+        *   It will use `window.confirm` to ask the user for confirmation.
+        *   If confirmed, it will call the `deleteWorkspace` action atom.
+    *   The button will be disabled if no workspace is selected or if there's only one workspace left.
+
+---
+
+```diff
+    appStateAtom,
+    deleteCardAtom,
++   deleteWorkspaceAtom,
+  } from '../state/atoms';
+  import WorkspaceSwitcher from './WorkspaceSwitcher';
+    const [appState] = useAtom(appStateAtom);
+    const deleteCard = useSetAtom(deleteCardAtom);
++   const deleteWorkspace = useSetAtom(deleteWorkspaceAtom);
+    const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
+    const pushToastMsg = usePushToastMsg();
+      }
+    }, [createWorkspace]);
++ 
++   const handleDeleteCurrentWorkspace = useCallback(() => {
++     if (!currentWorkspaceId) {
++       pushToastMsg("No workspace selected.");
++       return;
++     }
++     const workspaceCount = Object.keys(appState.workspaces).length;
++     if (workspaceCount <= 1) {
++         pushToastMsg("Cannot delete the last workspace.");
++         return;
++     }
++     const workspaceName = appState.workspaces[currentWorkspaceId]?.name ?? 'this workspace';
++ 
++     if (window.confirm(`Are you sure you want to delete "${workspaceName}"? This action cannot be undone.`)) {
++       deleteWorkspace(currentWorkspaceId);
++       pushToastMsg(`Workspace "${workspaceName}" deleted.`);
++     }
++   }, [currentWorkspaceId, appState.workspaces, deleteWorkspace, pushToastMsg]);
+  
+    const handleCardClick = useCallback((cardId: string) => {
+    const cardList = Object.values(cards);
+    const existingWorkspaceIds = Object.keys(appState.workspaces);
++   const canDeleteWorkspace = currentWorkspaceId !== null && existingWorkspaceIds.length > 1;
+  
+    return (
+        </List>
+        <Divider />
+-       <Box sx={{ p: 2 }}>
++       <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
+          <WorkspaceSwitcher />
++         <IconButton
++             onClick={handleDeleteCurrentWorkspace}
++             disabled={!canDeleteWorkspace}
++             size="small"
++             color="error"
++             sx={{ ml: 1 }}
++             aria-label="delete current workspace"
++             title="Delete Current Workspace"
++         >
++             <DeleteIcon fontSize="inherit" />
++         </IconButton>
+        </Box>
+        <Button onClick={handleNewWorkspace} sx={{ m: 2, mt: 0 }}>
+```
+
+---
+
+I've added a delete icon button next to the workspace switcher in the sidebar.
+
+*   It uses the `deleteWorkspaceAtom` action.
+*   It confirms with the user before deleting using `window.confirm`.
+*   It shows a toast message on success or if deletion isn't possible (no workspace selected, or only one exists).
+*   The button is disabled if deleting the current workspace is not allowed (no workspace selected or only one exists).
+
+You should now be able to delete the currently selected workspace using this new button.
+
+---
+
+_**User**_
+
+Do not use native dialogs like alert or confirm.  Instead, use the appropriate MUI components
+
+---
+
+_**Assistant**_
+
 
 
 ---

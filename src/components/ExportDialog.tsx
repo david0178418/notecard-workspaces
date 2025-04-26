@@ -3,6 +3,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel, Button, List, ListItem, Typography
 } from '@mui/material';
 import type { WorkspaceData } from '../types';
+import { usePushToastMsg } from '../state/atoms';
 
 interface ExportDialogProps {
   open: boolean;
@@ -13,6 +14,7 @@ interface ExportDialogProps {
 function ExportDialog({ open, onClose, workspaces }: ExportDialogProps) {
   const [selection, setSelection] = useState<Record<string, boolean>>({});
   const workspaceList = Object.values(workspaces);
+  const pushToastMsg = usePushToastMsg();
 
   // Initialize selection when dialog opens or workspaces change
   useEffect(() => {
@@ -41,8 +43,7 @@ function ExportDialog({ open, onClose, workspaces }: ExportDialogProps) {
     });
 
     if (Object.keys(workspacesToExport).length === 0) {
-      // Consider using toast here if available globally or passed as prop
-      alert("Please select at least one workspace to export.");
+      pushToastMsg("Please select at least one workspace to export.");
       return;
     }
 
@@ -59,7 +60,7 @@ function ExportDialog({ open, onClose, workspaces }: ExportDialogProps) {
     URL.revokeObjectURL(url);
     console.log('Export initiated for selected workspaces');
     onClose(); // Close dialog via callback
-  }, [workspaces, selection, onClose]);
+  }, [workspaces, selection, onClose, pushToastMsg]);
 
   return (
     <Dialog open={open} onClose={onClose}>
