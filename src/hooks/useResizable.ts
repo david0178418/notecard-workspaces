@@ -67,7 +67,6 @@ export function useResizable({
   const handleMouseDown = useCallback((event: React.MouseEvent<SVGElement>) => {
     if (!isEnabled || event.button !== 0 || !cardRef.current) return;
 
-    console.log('[Resizable] Mouse Down Triggered', { cardId }); // LOGGING
     event.stopPropagation(); // Prevent card dragging while resizing
     setIsResizing(true);
     const currentCardElement = cardRef.current;
@@ -78,9 +77,7 @@ export function useResizable({
     setStartSize(currentSize);
 
     const mousePos = getMousePositionInSvg(event.nativeEvent);
-    console.log('[Resizable] Mouse Down - Initial SVG Position:', mousePos); // LOGGING
     if(mousePos) {
-      setStartMousePos(mousePos);
       startScreenPosRef.current = { x: event.clientX, y: event.clientY };
     }
 
@@ -88,11 +85,8 @@ export function useResizable({
 
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
-    console.log('[Resizable] handleMouseMove called'); // LOGGING: Check if handler is invoked
-    console.log('[Resizable] Checking condition:', { isResizing, startMousePos, cardRefCurrent: cardRef.current }); // LOGGING: Check condition values
     if (!isResizing || !startScreenPosRef.current || !cardRef.current ) return;
 
-    console.log('[Resizable] Mouse Move Triggered'); // LOGGING
     const currentScreenX = event.clientX;
     const currentScreenY = event.clientY;
 
@@ -105,18 +99,14 @@ export function useResizable({
     const newWidth = Math.max(MIN_CARD_WIDTH, startSize.width + scaledDx);
     const newHeight = Math.max(MIN_CARD_HEIGHT, startSize.height + scaledDy);
 
-    console.log('[Resizable] Calculated New Size:', { screenDeltaX, screenDeltaY, zoom, scaledDx, scaledDy, newWidth, newHeight, startSize }); // Updated LOGGING
-
     updateSize({ cardId, size: { width: newWidth, height: newHeight } });
 
   }, [isResizing, startScreenPosRef, startSize, cardId, updateSize, cardRef, getMousePositionInSvg, zoom]);
 
 
   const handleMouseUp = useCallback((event: MouseEvent) => {
-    console.log('[Resizable] handleMouseUp called'); // LOGGING: Check if handler is invoked
     if (!isResizing) return;
 
-    console.log('[Resizable] Mouse Up Triggered'); // LOGGING
     event.stopPropagation();
     setIsResizing(false);
     setStartMousePos(null);
@@ -132,13 +122,11 @@ export function useResizable({
     }
 
     // Add listeners when resizing starts
-    console.log('[Resizable] Adding mousemove/mouseup listeners'); // LOGGING
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
     // Cleanup function to remove listeners
     return () => {
-      console.log('[Resizable] Removing mousemove/mouseup listeners'); // LOGGING
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };

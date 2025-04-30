@@ -86,8 +86,6 @@ export function useDraggable({
 
   endDragInteractionRef.current = () => {
     if (isDragging.current) {
-      console.log(`[Draggable ${cardId}] endDragInteraction called`); // LOGGING
-
       // Call bringToFront *before* resetting state and removing listeners
       bringToFront(cardId);
 
@@ -100,7 +98,6 @@ export function useDraggable({
       window.removeEventListener('touchcancel', handleTouchEndOrCancelRef.current);
 
       // Reset state
-      console.log(`[Draggable ${cardId}] Setting drag state false`); // LOGGING
       isDragging.current = false;
       setIsDraggingState(false);
       touchIdentifier.current = null;
@@ -136,38 +133,24 @@ export function useDraggable({
 
   const handleMouseDown = useCallback(
     (event: React.MouseEvent<SVGGElement>) => {
-      console.log(`[Draggable ${cardId}] handleMouseDown called`); // LOGGING
       if (
         !isEnabled ||
         event.button !== 0 ||
         touchIdentifier.current !== null || // Don't allow mouse drag if touch is active
         !cardRef.current
       ) {
-        console.log(
-          `[Draggable ${cardId}] handleMouseDown returning early`,
-          {
-            isEnabled,
-            button: event.button,
-            touchId: touchIdentifier.current,
-            cardRefExists: !!cardRef.current,
-          }
-        );
         return;
       }
 
       // Check if the click originated on a resize handle or delete button
       const targetElement = event.target as Element;
       if (targetElement.closest('[style*="cursor: nwse-resize"], [aria-label="delete card"]')) {
-        console.log(
-          `[Draggable ${cardId}] Clicked on handle/button, preventing drag.`
-        ); // LOGGING
         return;
       }
 
       event.stopPropagation(); // Prevent pan/zoom if starting drag on card
       // bringToFront is now handled by useEffect based on isDraggingState
 
-      console.log(`[Draggable ${cardId}] Setting drag state true`); // LOGGING
       isDragging.current = true;
       setIsDraggingState(true);
 
@@ -207,9 +190,6 @@ export function useDraggable({
       // Check if the touch originated on a resize handle or delete button
       const targetElement = event.target as Element;
       if (targetElement.closest('[style*="cursor: nwse-resize"], [aria-label="delete card"]')) {
-        console.log(
-          `[Draggable ${cardId}] Touched handle/button, preventing drag.`
-        ); // LOGGING
         return;
       }
 
@@ -220,7 +200,6 @@ export function useDraggable({
       // Add null check for touch and cardRef
       if (!touch || !cardRef.current) return;
 
-      console.log(`[Draggable ${cardId}] Setting drag state true (touch)`); // LOGGING
       isDragging.current = true;
       setIsDraggingState(true);
       touchIdentifier.current = touch.identifier;

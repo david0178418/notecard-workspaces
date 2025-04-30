@@ -19792,13 +19792,69 @@ _**Assistant**_
 
 ---
 
+Okay, it seems the 2% scale increase wasn't noticeable enough to give that immediate "pop" feeling.
 
+Let's try a slightly more pronounced visual effect combination on click/drag start:
+
+1.  **Increase the scale factor** from `1.02` (2%) to `1.05` (5%).
+2.  **Change the border** of the card when dragging (e.g., make it slightly thicker and use the theme's primary color).
+
+This requires modifying the `transform` in the main `<g>` element again and also adjusting the `rectStyle` memo to depend on the `isDragging` state.
+
+Let's modify `src/components/Card.tsx`.
 
 ---
 
+```diff
+    const resizeHandleOffset = 4; // Small offset from the corner
+  
+-   // Memoize styles/attributes that depend on theme
++   // Memoize styles/attributes that depend on theme AND isDragging
+    const rectStyle = useMemo(() => ({
+      fill: theme.palette.background.paper,
+-     stroke: theme.palette.divider,
+-     strokeWidth: 1,
+-     rx: theme.shape.borderRadius, // Use theme for rounded corners
+-   }), [theme]);
++     // Change stroke color and width when dragging
++     stroke: isDragging ? theme.palette.primary.main : theme.palette.divider,
++     strokeWidth: isDragging ? 2 : 1,
++     rx: theme.shape.borderRadius,
++     // Add transition for stroke properties
++     transition: 'stroke 0.2s ease-out, stroke-width 0.2s ease-out',
++   }), [theme, isDragging]);
+  
+    // Effect to animate scale-in on mount
+```
 
+```diff
+      <g
+        ref={cardRef}
+-       transform={`${cardTransform} scale(${isDragging ? scale * 1.02 : scale})`}
++       transform={`${cardTransform} scale(${isDragging ? scale * 1.05 : scale})`}
+        data-draggable-card="true"
+        {...draggableProps}
+```
 
 ---
+
+Okay, the `Card` component now applies a 5% scale increase and changes the border style (thicker, primary color) when `isDragging` is true.
+
+This combination of visual changes should provide a much more noticeable "pop" effect the moment you click and hold on a card, hopefully simulating the bring-to-front feel effectively while still preserving the stability of the drag operation.
+
+Give it a try and see if this enhanced visual feedback feels better.
+
+---
+
+_**User**_
+
+I see the effect  you're going for. I like it. We'll keep it.  Let's revisit the bring-to-front action later. It's current behavior will do.
+
+For now, let's do a cleanup pass.  Go ahead and do a reorganization/cleanup of the code as you see fit.
+
+---
+
+_**Assistant**_
 
 
 

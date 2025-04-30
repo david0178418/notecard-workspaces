@@ -154,7 +154,6 @@ const Card = React.memo(function Card({ cardId }: CardProps) {
       data-draggable-card="true"
       {...draggableProps}
       onDoubleClick={handleDoubleClick}
-      onClick={() => console.log(`[Card ${cardId}] onClick, isEditing: ${isEditing}`)}
       style={{
         cursor: isEditing ? 'default' : 'grab',
         opacity: isDragging ? 0.8 : 1,
