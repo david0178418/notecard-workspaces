@@ -1,176 +1,154 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
-import { useSetAtom, useAtomValue } from 'jotai';
-import { updateCardSizeAtom, currentViewStateAtom, bringCardToFrontAtom } from '../state/atoms';
-import type { Point, CardSize, CardData } from '../types';
-import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../components/Card'; // Use exported constants
+import { useState, useCallback, useRef, RefObject, useEffect } from 'react';
+import { useSetAtom } from 'jotai';
+import { updateCardSizeAtom } from '../state/atoms';
+import { useAtomValue } from 'jotai';
+import { currentViewStateAtom } from '../state/atoms';
+import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../components/Card'; // Import min sizes
+
+interface Size {
+  width: number;
+  height: number;
+}
 
 interface UseResizableProps {
   cardId: string;
-  cardData: CardData | undefined;
-  sizerRef: React.RefObject<HTMLDivElement | null>;
-  cardContentRef: React.RefObject<HTMLDivElement | null>;
-  isEnabled: boolean;
+  initialSize: Size;
+  cardRef: RefObject<SVGGElement | null>; // Allow null ref
+  isEnabled?: boolean;
+}
+
+interface ResizableProps {
+  onMouseDown: (event: React.MouseEvent<SVGElement>) => void;
+}
+
+interface UseResizableReturn {
+  isResizing: boolean;
+  resizableProps: ResizableProps;
 }
 
 export function useResizable({
   cardId,
-  cardData,
-  sizerRef,
-  cardContentRef,
-  isEnabled,
-}: UseResizableProps) {
+  initialSize,
+  cardRef,
+  isEnabled = true,
+}: UseResizableProps): UseResizableReturn {
+  const updateSize = useSetAtom(updateCardSizeAtom);
   const [isResizing, setIsResizing] = useState(false);
-  const resizeStartPointer = useRef<Point>({ x: 0, y: 0 });
-  const resizeStartSize = useRef<CardSize | null>(null);
+  const [startSize, setStartSize] = useState<Size>(initialSize);
+  const [startMousePos, setStartMousePos] = useState<{ x: number; y: number } | null>(null);
+  const cardSvgRef = useRef<SVGSVGElement | null>(null);
+  const startScreenPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const { zoom } = useAtomValue(currentViewStateAtom);
-  const updateSize = useSetAtom(updateCardSizeAtom);
-  const bringToFront = useSetAtom(bringCardToFrontAtom);
 
-  const startResize = useCallback(
-    (clientX: number, clientY: number) => {
-      if (!cardData?.size || !isEnabled) return;
-      bringToFront(cardId);
-      setIsResizing(true);
-      resizeStartPointer.current = { x: clientX, y: clientY };
-      resizeStartSize.current = { ...cardData.size };
-      document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'nwse-resize';
-    },
-    [cardId, cardData?.size, bringToFront, isEnabled]
-  );
-
-  const getVerticalPadding = useCallback(() => {
-    if (cardContentRef.current) {
-      const styles = window.getComputedStyle(cardContentRef.current);
-      const paddingTop = parseFloat(styles.paddingTop) || 0;
-      const paddingBottom = parseFloat(styles.paddingBottom) || 0;
-      return paddingTop + paddingBottom;
-    }
-    return 16 + 8; // Fallback to previous estimate
-  }, [cardContentRef]);
-
-  const handleResize = useCallback(
-    (clientX: number, clientY: number) => {
-      if (!isResizing || !resizeStartSize.current || !sizerRef.current || !cardData || !cardContentRef.current) return;
-
-      requestAnimationFrame(() => {
-        if (!isResizing || !resizeStartSize.current || !sizerRef.current || !cardData || !cardContentRef.current) return;
-
-        const deltaX = clientX - resizeStartPointer.current.x;
-        const deltaY = clientY - resizeStartPointer.current.y;
-        const newWidth = resizeStartSize.current.width + deltaX / zoom;
-        const newHeight = resizeStartSize.current.height + deltaY / zoom;
-        const clampedWidth = Math.max(MIN_CARD_WIDTH, newWidth);
-        const userClampedHeight = Math.max(MIN_CARD_HEIGHT, newHeight);
-
-        sizerRef.current.innerText = cardData.text ?? '';
-        sizerRef.current.style.width = `${clampedWidth}px`;
-        const textScrollHeight = sizerRef.current.scrollHeight;
-        const verticalPadding = getVerticalPadding();
-        const minHeightForText = textScrollHeight + verticalPadding;
-        const finalHeight = Math.max(userClampedHeight, minHeightForText, MIN_CARD_HEIGHT);
-        updateSize({ cardId, size: { width: clampedWidth, height: finalHeight } });
-      });
-    },
-    [cardId, isResizing, updateSize, zoom, cardData?.text, sizerRef, cardContentRef, getVerticalPadding]
-  );
-
-  const endResize = useCallback(() => {
-    if (isResizing) {
-      setIsResizing(false);
-      resizeStartSize.current = null;
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    }
-  }, [isResizing]);
-
+  // Get the SVG element reference once
   useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      if (isResizing) {
-        handleResize(event.clientX, event.clientY);
-      }
-    };
-    const handleMouseUp = (event: MouseEvent) => {
-      if (event.button === 0 && isResizing) {
-        endResize();
-      }
-    };
+    if (cardRef.current) {
+      cardSvgRef.current = cardRef.current.ownerSVGElement;
+    }
+  }, [cardRef]);
 
-    if (isResizing) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    } else {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+
+  const getMousePositionInSvg = useCallback((event: MouseEvent): { x: number; y: number } | null => {
+    if (!cardSvgRef.current) return null;
+
+    const svgPoint = cardSvgRef.current.createSVGPoint();
+    svgPoint.x = event.clientX;
+    svgPoint.y = event.clientY;
+
+    const screenCTM = cardSvgRef.current.getScreenCTM();
+    if (!screenCTM) return null;
+
+    const { x, y } = svgPoint.matrixTransform(screenCTM.inverse());
+    return { x, y };
+  }, []);
+
+
+  const handleMouseDown = useCallback((event: React.MouseEvent<SVGElement>) => {
+    if (!isEnabled || event.button !== 0 || !cardRef.current) return;
+
+    console.log('[Resizable] Mouse Down Triggered', { cardId }); // LOGGING
+    event.stopPropagation(); // Prevent card dragging while resizing
+    setIsResizing(true);
+    const currentCardElement = cardRef.current;
+    const currentSize = {
+        width: parseFloat(currentCardElement.querySelector('rect')?.getAttribute('width') || '0'),
+        height: parseFloat(currentCardElement.querySelector('rect')?.getAttribute('height') || '0')
+    };
+    setStartSize(currentSize);
+
+    const mousePos = getMousePositionInSvg(event.nativeEvent);
+    console.log('[Resizable] Mouse Down - Initial SVG Position:', mousePos); // LOGGING
+    if(mousePos) {
+      setStartMousePos(mousePos);
+      startScreenPosRef.current = { x: event.clientX, y: event.clientY };
     }
 
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing, handleResize, endResize]);
+  }, [isEnabled, cardRef, updateSize, cardId, getMousePositionInSvg]);
 
+
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    console.log('[Resizable] handleMouseMove called'); // LOGGING: Check if handler is invoked
+    console.log('[Resizable] Checking condition:', { isResizing, startMousePos, cardRefCurrent: cardRef.current }); // LOGGING: Check condition values
+    if (!isResizing || !startScreenPosRef.current || !cardRef.current ) return;
+
+    console.log('[Resizable] Mouse Move Triggered'); // LOGGING
+    const currentScreenX = event.clientX;
+    const currentScreenY = event.clientY;
+
+    const screenDeltaX = currentScreenX - startScreenPosRef.current.x;
+    const screenDeltaY = currentScreenY - startScreenPosRef.current.y;
+
+    const scaledDx = screenDeltaX / zoom;
+    const scaledDy = screenDeltaY / zoom;
+
+    const newWidth = Math.max(MIN_CARD_WIDTH, startSize.width + scaledDx);
+    const newHeight = Math.max(MIN_CARD_HEIGHT, startSize.height + scaledDy);
+
+    console.log('[Resizable] Calculated New Size:', { screenDeltaX, screenDeltaY, zoom, scaledDx, scaledDy, newWidth, newHeight, startSize }); // Updated LOGGING
+
+    updateSize({ cardId, size: { width: newWidth, height: newHeight } });
+
+  }, [isResizing, startScreenPosRef, startSize, cardId, updateSize, cardRef, getMousePositionInSvg, zoom]);
+
+
+  const handleMouseUp = useCallback((event: MouseEvent) => {
+    console.log('[Resizable] handleMouseUp called'); // LOGGING: Check if handler is invoked
+    if (!isResizing) return;
+
+    console.log('[Resizable] Mouse Up Triggered'); // LOGGING
+    event.stopPropagation();
+    setIsResizing(false);
+    setStartMousePos(null);
+    startScreenPosRef.current = null;
+
+  }, [isResizing, handleMouseMove]);
+
+
+  // Manage global listeners based on isResizing state
   useEffect(() => {
-    const handleTouchMove = (event: TouchEvent) => {
-      if (isResizing && event.touches.length === 1) {
-        const touch = event.touches[0];
-        if (touch) {
-          handleResize(touch.clientX, touch.clientY);
-        }
-      }
-    };
-    const handleTouchEnd = (_event: TouchEvent) => {
-      if (isResizing) {
-        endResize();
-      }
-    };
-
-    if (isResizing) {
-      window.addEventListener('touchmove', handleTouchMove, { passive: false });
-      window.addEventListener('touchend', handleTouchEnd);
-      window.addEventListener('touchcancel', handleTouchEnd);
-    } else {
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-      window.removeEventListener('touchcancel', handleTouchEnd);
+    if (!isResizing) {
+      return; // Do nothing if not resizing
     }
 
+    // Add listeners when resizing starts
+    console.log('[Resizable] Adding mousemove/mouseup listeners'); // LOGGING
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    // Cleanup function to remove listeners
     return () => {
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-      window.removeEventListener('touchcancel', handleTouchEnd);
+      console.log('[Resizable] Removing mousemove/mouseup listeners'); // LOGGING
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing, handleResize, endResize]);
+  }, [isResizing, handleMouseMove, handleMouseUp]); // Dependencies: run when isResizing or handlers change
 
-  const handleResizeMouseDown = useCallback(
-    (event: React.MouseEvent) => {
-      if (event.button !== 0 || !isEnabled) return;
-      event.stopPropagation();
-      startResize(event.clientX, event.clientY);
-    },
-    [startResize, isEnabled]
-  );
-
-  const handleResizeTouchStart = useCallback(
-    (event: React.TouchEvent) => {
-      if (event.touches.length === 1 && isEnabled) {
-        const touch = event.touches[0];
-        if (!touch) return;
-        event.stopPropagation();
-        startResize(touch.clientX, touch.clientY);
-      }
-    },
-    [startResize, isEnabled]
-  );
 
   return {
     isResizing,
-    resizableHandleProps: {
-      onMouseDown: handleResizeMouseDown,
-      onTouchStart: handleResizeTouchStart,
-      'data-resize-handle': 'true',
+    resizableProps: {
+      onMouseDown: handleMouseDown,
     },
-    _getVerticalPadding: getVerticalPadding,
   };
 } 

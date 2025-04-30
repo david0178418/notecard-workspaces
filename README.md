@@ -39,9 +39,9 @@ A simple web application for creating and organizing virtual note cards on an in
     cd cards
     ```
 2.  Install dependencies:
-    ```bash
-    bun install
-    ```
+```bash
+bun install
+```
 
 ### Running the Development Server
 
