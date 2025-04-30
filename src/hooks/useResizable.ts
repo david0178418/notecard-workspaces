@@ -37,6 +37,7 @@ export function useResizable({
   const [startSize, setStartSize] = useState<Size>(initialSize);
   const cardSvgRef = useRef<SVGSVGElement | null>(null);
   const startScreenPosRef = useRef<{ x: number; y: number } | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   const { zoom } = useAtomValue(currentViewStateAtom);
 
@@ -98,7 +99,15 @@ export function useResizable({
     const newWidth = Math.max(MIN_CARD_WIDTH, startSize.width + scaledDx);
     const newHeight = Math.max(MIN_CARD_HEIGHT, startSize.height + scaledDy);
 
-    updateSize({ cardId, size: { width: newWidth, height: newHeight } });
+    // Cancel any pending frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    // Schedule update in the next frame
+    animationFrameRef.current = requestAnimationFrame(() => {
+      updateSize({ cardId, size: { width: newWidth, height: newHeight } });
+    });
 
   }, [isResizing, startScreenPosRef, startSize, cardId, updateSize, cardRef, getMousePositionInSvg, zoom]);
 
@@ -109,6 +118,12 @@ export function useResizable({
     event.stopPropagation();
     setIsResizing(false);
     startScreenPosRef.current = null;
+
+    // Cancel any pending animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
   }, [isResizing]);
 
@@ -123,10 +138,15 @@ export function useResizable({
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
-    // Cleanup function to remove listeners
+    // Cleanup function to remove listeners AND cancel animation frame
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      // Cancel animation frame on cleanup as well
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
   }, [isResizing, handleMouseMove, handleMouseUp]); // Dependencies: run when isResizing or handlers change
 

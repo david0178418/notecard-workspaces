@@ -20058,3 +20058,257 @@ _**Assistant**_
 
 ---
 
+```bash
+bun check
+```
+
+```
+$ bun tsc
+src/components/Card.tsx:35:9 - error TS6133: 'updateSize' is declared but its va
+lue is never re
+ad.
+               
+35   const updateSize = useSetAtom(updateCardSizeAtom);
+           ~~~~~~~~~~
+
+src/components/Card.tsx:36:9 - error TS6133: 'interactionOrder' is declared but
+its value is ne
+ver read.
+               
+36   const interactionOrder = useAtomValue(interactionOrderAtom);
+           ~~~~~~~~~~~~~~~~
+
+src/components/Card.tsx:56:11 - error TS6133: 'isResizing' is declared but its v
+alue is never r
+ead.
+               
+56   const { isResizing, resizableProps } = useResizable({
+             ~~~~~~~~~~
+
+src/hooks/useDraggable.ts:8:22 - error TS6196: 'ViewState' is declared but never
+ used.
+
+8 import type { Point, ViewState } from '../types';
+                       ~~~~~~~~~
+
+src/hooks/usePanZoom.ts:33:32 - error TS2554: Expected 1 arguments, but got 0.
+
+33   const endPanInteractionRef = useRef<() => void>();
+                                  ~~~~~~
+
+  node_modules/@types/react/index.d.ts:1726:24
+    1726     function useRef<T>(initialValue: T): RefObject<T>;
+                                ~~~~~~~~~~~~~~~
+    An argument for 'initialValue' was not provided.
+
+src/hooks/useResizable.ts:38:10 - error TS6133: 'startMousePos' is declared but
+its value is ne
+ver read.
+               
+38   const [startMousePos, setStartMousePos] = useState<{ x: number; y: number }
+ | null>(null);
+            ~~~~~~~~~~~~~
+
+
+Found 6 errors in 4 files.
+
+Errors  Files
+     3  src/components/Card.tsx:35
+     1  src/hooks/useDraggable.ts:8
+     1  src/hooks/usePanZoom.ts:33
+     1  src/hooks/useResizable.ts:38
+error: "tsc" exited with code 2
+
+```
+
+---
+
+Okay, `bun check` found several TypeScript errors, mostly related to unused variables or imports, plus one incorrect `useRef` call. Let's fix these:
+
+1.  **`src/components/Card.tsx`:**
+    *   Remove unused `updateSize` (line 35).
+    *   Remove unused `interactionOrder` (line 36).
+    *   Remove unused `isResizing` from the `useResizable` hook result (line 56).
+
+---
+
+```diff
+    const updateText = useSetAtom(updateCardTextAtom);
+    const deleteCard = useSetAtom(deleteCardAtom);
+-   const updateSize = useSetAtom(updateCardSizeAtom);
+-   const interactionOrder = useAtomValue(interactionOrderAtom);
+    const [lastCreatedCardId, setLastCreatedCardId] = useAtom(lastCreatedCardIdAtom);
+    const theme = useTheme();
+```
+
+```diff
+  
+    // Use Resizable Hook
+-   const { isResizing, resizableProps } = useResizable({
++   const { resizableProps } = useResizable({
+      cardId,
+      initialSize: cardData?.size ?? { width: MIN_CARD_WIDTH, height: MIN_CARD_HEIGHT },
+```
+
+---
+
+2.  **`src/hooks/useDraggable.ts`:**
+    *   Remove unused type import `ViewState` (line 8).
+
+---
+
+```diff
+    bringCardToFrontAtom,
+  } from '../state/atoms';
+- import type { Point, ViewState } from '../types';
++ import type { Point /*, ViewState */ } from '../types'; // Removed unused ViewState
+  
+  // Define props specifically for SVGGElement as used in Card.tsx
+```
+
+---
+
+3.  **`src/hooks/usePanZoom.ts`:**
+    *   Provide an initial value (e.g., `null` or a dummy function) to `useRef<() => void>()` (line 33). Using `null` is typical.
+
+---
+
+
+
+---
+
+It seems the apply model didn't make the change for `usePanZoom.ts`. Let me try reapplying that specific edit.
+
+---
+
+```diff
+    const pinchTouches = useRef<[number, number] | null>(null);
+    const initialPinchState = useRef<{ distance: number, midpoint: Point, pan: Point, zoom: number } | null>(null);
+-   const endPanInteractionRef = useRef<() => void>();
++   const endPanInteractionRef = useRef<(() => void) | null>(null);
+  
+    const updateStateAtom = useSetAtom(updateViewStateAtom);
+```
+
+---
+
+4.  **`src/hooks/useResizable.ts`:**
+    *   Remove the unused state variable `startMousePos` (line 38). We only used `setStartMousePos` briefly for debugging, but the actual logic now relies on `startScreenPosRef`. We also need to remove the line that *sets* it in `handleMouseDown`.
+
+---
+
+```diff
+    const [isResizing, setIsResizing] = useState(false);
+    const [startSize, setStartSize] = useState<Size>(initialSize);
+-   const [startMousePos, setStartMousePos] = useState<{ x: number; y: number } | null>(null);
+    const cardSvgRef = useRef<SVGSVGElement | null>(null);
+    const startScreenPosRef = useRef<{ x: number; y: number } | null>(null);
+```
+
+```diff
+      }
+  
+-   }, [isEnabled, cardRef, updateSize, cardId, getMousePositionInSvg]);
++   }, [isEnabled, cardRef, cardId, getMousePositionInSvg]);
+  
+  
+```
+
+```diff
+      event.stopPropagation();
+      setIsResizing(false);
+-     setStartMousePos(null);
+      startScreenPosRef.current = null;
+  
+-   }, [isResizing, handleMouseMove]);
++   }, [isResizing]);
+  
+  
+```
+
+---
+
+Okay, those errors should be addressed. Let's run the type check again to confirm.
+
+---
+
+```bash
+bun check
+```
+
+```
+    ~/Projects/cards    svg !1  bun check
+$ bun tsc
+src/components/Card.tsx:10:3 - error TS6133: 'interactionOrderAtom' is declared but its value i
+s never read.
+
+10   interactionOrderAtom,
+     ~~~~~~~~~~~~~~~~~~~~
+
+src/components/Card.tsx:12:3 - error TS6133: 'updateCardSizeAtom' is declared but its value is 
+never read.
+
+12   updateCardSizeAtom,
+     ~~~~~~~~~~~~~~~~~~
+
+
+Found 2 errors in the same file, starting at: src/components/Card.tsx:10
+
+error: "tsc" exited with code 2
+    ~/Projects/cards    svg !5                                                    2 ✘
+```
+
+---
+
+Ah, it seems removing the *usage* of `interactionOrder` and `updateSize` in `Card.tsx` left the *imports* unused. My apologies, I should have caught that.
+
+Let's remove the unused imports from `src/components/Card.tsx`.
+
+---
+
+```diff
+    updateCardTextAtom,
+    deleteCardAtom,
+-   interactionOrderAtom,
+    lastCreatedCardIdAtom,
+-   updateCardSizeAtom,
+  } from '../state/atoms';
+  import { useDraggable } from '../hooks/useDraggable';
+```
+
+---
+
+Okay, those unused imports are removed. Let's try the check one more time.
+
+---
+
+```bash
+bun check
+```
+
+```
+    ~/Projects/cards    svg !5  bun check
+$ bun tsc
+    ~/Projects/cards    svg !5                                                      ✔
+```
+
+---
+
+Excellent! `bun check` passes with no errors.
+
+We've removed the debugging logs and fixed the TypeScript issues. The codebase should be cleaner and type-safe now.
+
+---
+
+_**User**_
+
+Are there any performance adjustments you'd like to make?
+
+---
+
+_**Assistant**_
+
+
+
+---
+

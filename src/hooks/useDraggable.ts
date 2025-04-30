@@ -35,6 +35,7 @@ export function useDraggable({
   const isDragging = useRef(false); // Internal flag using ref
   const dragStartOffset = useRef<Point>({ x: 0, y: 0 });
   const touchIdentifier = useRef<number | null>(null);
+  const animationFrameRef = useRef<number | null>(null); // Ref for requestAnimationFrame ID
 
   const { pan, zoom } = useAtomValue(currentViewStateAtom);
   const updatePosition = useSetAtom(updateCardPositionAtom);
@@ -54,11 +55,19 @@ export function useDraggable({
 
   // Actual handler logic, stored in refs
   handleDragRef.current = (clientX: number, clientY: number) => {
-    const pointerWorkspaceX = (clientX - pan.x) / zoom;
-    const pointerWorkspaceY = (clientY - pan.y) / zoom;
-    const newPositionX = pointerWorkspaceX - dragStartOffset.current.x;
-    const newPositionY = pointerWorkspaceY - dragStartOffset.current.y;
-    updatePosition({ cardId, position: { x: newPositionX, y: newPositionY } });
+    // Cancel any pending frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    // Schedule update in the next frame
+    animationFrameRef.current = requestAnimationFrame(() => {
+      const pointerWorkspaceX = (clientX - pan.x) / zoom;
+      const pointerWorkspaceY = (clientY - pan.y) / zoom;
+      const newPositionX = pointerWorkspaceX - dragStartOffset.current.x;
+      const newPositionY = pointerWorkspaceY - dragStartOffset.current.y;
+      updatePosition({ cardId, position: { x: newPositionX, y: newPositionY } });
+    });
   };
 
   handleMouseMoveRef.current = (event: MouseEvent) => {
@@ -86,6 +95,12 @@ export function useDraggable({
 
   endDragInteractionRef.current = () => {
     if (isDragging.current) {
+      // Cancel any pending animation frame before final state update/reset
+      if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
+      }
+
       // Call bringToFront *before* resetting state and removing listeners
       bringToFront(cardId);
 
@@ -124,6 +139,10 @@ export function useDraggable({
   useEffect(() => {
     // Return the cleanup function
     return () => {
+      // Cancel animation frame on unmount
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
       // Use the ref to ensure the *latest* cleanup logic is called
       endDragInteractionRef.current();
     };
