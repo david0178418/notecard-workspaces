@@ -17720,3 +17720,2087 @@ _**Assistant**_
 
 ---
 
+Okay, let's restore the scale-in animation for newly created cards. This usually involves making the card start small (e.g., scale 0) and quickly transition to its normal size (scale 1) when it first appears.
+
+First, I need to see how new cards are added. I'll check the `addCardAtom` implementation in `src/state/atoms.ts`.
+
+---
+
+Read file: src/state/atoms.ts
+
+---
+
+Okay, I've examined `addCardAtom`. It creates the new card data, adds it to the `appStateAtom`, updates the `interactionOrderAtom`, and sets the `lastCreatedCardIdAtom` (which triggers the text field focus).
+
+To add the animation, we'll do the following:
+
+1.  **Modify `Card.tsx`:**
+    *   Add a local state variable `scale` initialized to `0`.
+    *   Use a `useEffect` hook that runs once on mount. Inside this effect, use `requestAnimationFrame` twice (or a tiny `setTimeout`) to ensure the initial render with `scale: 0` completes before setting `scale` to `1`. This triggers the CSS transition.
+    *   Apply the `scale` to the main `<g>` element's transform: `transform={\`translate(${currentPos.x}, ${currentPos.y}) scale(${scale})\`}`.
+    *   Add a CSS `transition` style to the `<g>` element for the `transform` property.
+    *   *No changes needed in `addCardAtom` for this approach.* This keeps the state atom simpler.
+
+Let's modify `src/components/Card.tsx`.
+
+---
+
+```diff
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState(cardData?.text ?? '');
++   const [scale, setScale] = useState(0); // Initial scale state
+  
+    // Ref now points to the main SVG group element
+```
+
+```diff
+      rx: theme.shape.borderRadius, // Use theme for rounded corners
+    }), [theme]);
++ 
++   // Effect to animate scale-in on mount
++   useEffect(() => {
++     // Double requestAnimationFrame ensures the initial state (scale 0)
++     // has rendered before we trigger the transition to scale 1.
++     requestAnimationFrame(() => {
++       requestAnimationFrame(() => {
++         setScale(1);
++       });
++     });
++   }, []); // Empty dependency array ensures this runs only once on mount
+  
+    return (
+      <g
+        ref={cardRef}
+-       transform={cardTransform}
++       transform={`${cardTransform} scale(${scale})`}
+        data-draggable-card="true"
+        {...draggableProps}
+        onDoubleClick={handleDoubleClick}
+-       style={{ cursor: isEditing ? 'default' : 'grab', opacity: isDragging ? 0.8 : 1 }}
++       style={{
++         cursor: isEditing ? 'default' : 'grab',
++         opacity: isDragging ? 0.8 : 1,
++         transition: 'transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28)', // Example transition
++         transformOrigin: `${currentSize.width / 2}px ${currentSize.height / 2}px`,
++       }}
+      >
+        <rect
+```
+
+---
+
+OK, I've updated the `Card` component. It now includes a `scale` state initialized to 0, a `useEffect` to animate the scale to 1 shortly after mounting, applies this scale to the `<g>` element's transform, and adds a CSS transition for the `transform` property. I also added `transformOrigin` to ensure the scaling happens from the center of the card.
+
+This should restore the scale-in animation when you create new cards. Give it a try!
+
+---
+
+_**User**_
+
+Great.  However, how there seems to be occasions where dragging has issues.
+
+Initially, things seem to work fine. But if I drag a different card, then attempt to drag another card that had been dragged previously, it takes two clicks to register the "grab".
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, that "two-click" behavior often points to an issue where the first click is either being consumed by something else, or the state enabling the drag isn't correctly set until the second click.
+
+Let's investigate the `useDraggable` hook (`src/hooks/useDraggable.ts`) and the `Card` component (`src/components/Card.tsx`) where it's used.
+
+My initial hypothesis is that either:
+a.  The `isEnabled` check within `useDraggable`'s `handleMouseDown` is failing on the first click for some reason (perhaps related to the `isEditing` state in the `Card` component).
+b.  The cleanup logic (`endDragInteraction`) from the *previous* drag interaction isn't fully completing or is leaving the component in a state where the next drag initiation is blocked.
+
+To diagnose this, I'll add some logging:
+
+1.  In `Card.tsx`: Add a simple `onClick` handler to the main `<g>` element to log the value of `isEditing` when a click occurs.
+2.  In `useDraggable.ts`: Add logs inside `handleMouseDown` to check the `isEnabled` value and when the drag state (`isDragging.current` and `isDraggingState`) is set.
+3.  In `useDraggable.ts`: Add logs inside `endDragInteraction` to confirm it's running and resetting the state.
+
+First, let's modify `Card.tsx`.
+
+---
+
+```diff
+        {...draggableProps}
+        onDoubleClick={handleDoubleClick}
++       onClick={() => console.log(`[Card ${cardId}] onClick, isEditing: ${isEditing}`)}
+        style={{
+          cursor: isEditing ? 'default' : 'grab',
+```
+
+---
+
+Now, let's add logs to `useDraggable.ts`.
+
+---
+
+```diff
+    const handleMouseDownElement = useCallback(
+      (event: React.MouseEvent) => {
++       console.log(`[Draggable ${cardId}] handleMouseDown called`); // LOGGING
+        if ((event.target as Element).closest('[data-resize-handle="true"]') || event.button !== 0 || !isEnabled) return;
+        event.stopPropagation();
+```
+
+---
+
+It seems the model made a mistake applying the previous edit and put the logs in the wrong place within `useDraggable.ts`. It also caused a linter error by modifying the `endDragInteraction` dependencies incorrectly.
+
+I will correct this by putting the logs in the intended locations (`handleMouseDown` and `endDragInteraction`) and fixing the dependencies.
+
+---
+
+```diff
+  import { useSetAtom, useAtomValue } from 'jotai';
+  import { updateCardPositionAtom, currentViewStateAtom, bringCardToFrontAtom } from '../state/atoms';
+- import type { Point } from '../types';
++ import type { Point, ViewState } from '../types';
+  
+  // Make the ref type more generic to accept SVG or HTML elements
+```
+
+```diff
+    // --- Element-Specific Event Handlers --- //
+    // These just initiate the drag
+-   const handleMouseDownElement = useCallback(
+-     (event: React.MouseEvent) => {
++   const handleMouseDown = useCallback(
++     (event: React.MouseEvent<T>) => {
+        console.log(`[Draggable ${cardId}] handleMouseDown called`); // LOGGING
+-       if ((event.target as Element).closest('[data-resize-handle="true"]') || event.button !== 0 || !isEnabled) return;
++       if (
++         !isEnabled ||
++         event.button !== 0 ||
++         touchIdentifier.current !== null ||
++         !cardRef.current
++       ) {
++         console.log(`[Draggable ${cardId}] handleMouseDown returning early`, { isEnabled, button: event.button, touchId: touchIdentifier.current, cardRefExists: !!cardRef.current }); // LOGGING
++         return;
++       }
++ 
+        event.stopPropagation();
+-       startDrag(event.clientX, event.clientY);
+-     },
+-     [startDrag, isEnabled]
++       bringToFront(cardId);
++ 
++       console.log(`[Draggable ${cardId}] Setting drag state true`); // LOGGING
++       isDragging.current = true;
++       setIsDraggingState(true);
++ 
++       const workspaceRect = cardRef.current.ownerSVGElement?.getBoundingClientRect();
++       if (workspaceRect) {
++         const pointerWorkspaceX = (event.clientX - pan.x) / zoom;
++         const pointerWorkspaceY = (event.clientY - pan.y) / zoom;
++         dragStartOffset.current = {
++           x: pointerWorkspaceX - initialPosition.x,
++           y: pointerWorkspaceY - initialPosition.y,
++         };
++       }
++       document.body.style.userSelect = 'none';
++       cardRef.current.style.cursor = 'grabbing';
++     },
++     [cardId, initialPosition, cardRef, isEnabled, bringToFront, pan, zoom]
+    );
+  
+-   const handleTouchStartElement = useCallback(
++   const handleTouchStart = useCallback(
+      (event: React.TouchEvent) => {
+        if ((event.target as Element).closest('[data-resize-handle="true"]') || event.touches.length !== 1 || !isEnabled) return;
+```
+
+```diff
+      isDragging: isDraggingState,
+      draggableProps: {
+-       onMouseDown: handleMouseDownElement,
+-       onTouchStart: handleTouchStartElement,
++       onMouseDown: handleMouseDown,
++       onTouchStart: handleTouchStart,
+      },
+    };
+```
+
+---
+
+It seems the model is still struggling to apply the logging changes correctly to `useDraggable.ts` and is introducing type errors related to the generic element type `T`.
+
+Let's simplify. I'll manually specify the code for `useDraggable.ts` with the logs added correctly and ensure the types match the current usage (where `cardRef` points to an `SVGGElement`). I will also correct the dependencies in `endDragInteraction`.
+
+---
+
+```diff
+- import { useCallback, useRef, useState, useEffect } from 'react';
++ import { useState, useCallback, useRef, RefObject, useEffect } from 'react';
+  import { useSetAtom, useAtomValue } from 'jotai';
+  import { updateCardPositionAtom, currentViewStateAtom, bringCardToFrontAtom } from '../state/atoms';
+  import type { Point, ViewState } from '../types';
+  
+- // Make the ref type more generic to accept SVG or HTML elements
+- interface UseDraggableProps<T extends SVGElement | HTMLElement = HTMLElement> {
++ // Define props specifically for SVGGElement as used in Card.tsx
++ interface UseDraggableProps {
+    cardId: string;
+    initialPosition: Point;
+-   cardRef: React.RefObject<T | null>;
++   cardRef: RefObject<SVGGElement | null>; // Expecting SVG Ref from Card
+    isEnabled: boolean;
+  }
+  
+- export function useDraggable<T extends SVGElement | HTMLElement = HTMLElement>({
++ export function useDraggable({
+    cardId,
+    initialPosition,
+    cardRef,
+    isEnabled,
+- }: UseDraggableProps<T>) {
++ }: UseDraggableProps) {
+    const [isDraggingState, setIsDraggingState] = useState(false);
+-   const isDragging = useRef(false);
++   const isDragging = useRef(false); // Internal flag using ref
+    const dragStartOffset = useRef<Point>({ x: 0, y: 0 });
+    const touchIdentifier = useRef<number | null>(null);
+```
+
+```diff
+    // --- Define Global Listener Handlers --- //
+    // These need to be stable references, hence useCallback
+-   // Define handleDrag first as it's used by move listeners
++ 
+    const handleDrag = useCallback(
+      (clientX: number, clientY: number) => {
++       // Calculation remains the same
+        const pointerWorkspaceX = (clientX - pan.x) / zoom;
+        const pointerWorkspaceY = (clientY - pan.y) / zoom;
+```
+
+```diff
+        updatePosition({ cardId, position: { x: newPositionX, y: newPositionY } });
+      },
+-     [cardId, updatePosition, pan, zoom]
++     [cardId, updatePosition, pan, zoom] // Dependencies needed for calculation
+    );
+  
+    const handleMouseMove = useCallback(
+      (event: MouseEvent) => {
+-       if (touchIdentifier.current === null) {
++       if (isDragging.current && touchIdentifier.current === null) {
+          handleDrag(event.clientX, event.clientY);
+        }
+      },
+-     [handleDrag]
++     [handleDrag] // Depends on handleDrag
+    );
+  
+    const handleTouchMove = useCallback(
+      (event: TouchEvent) => {
+-       if (touchIdentifier.current !== null) {
++       if (isDragging.current && touchIdentifier.current !== null) {
+          let activeTouch: Touch | null = null;
+          for (let i = 0; i < event.touches.length; i++) {
+```
+
+```diff
+          }
+          if (activeTouch) {
+-           event.preventDefault();
++           event.preventDefault(); // Prevent scrolling while dragging
+            handleDrag(activeTouch.clientX, activeTouch.clientY);
+          }
+        }
+      },
+-     [handleDrag]
+-   );
+- 
+-   // Define end handlers BEFORE endDrag
+-   // We need a stable reference to endDrag, so we use a ref for the callback itself
+-   const endDragRef = useRef<() => void>();
++     [handleDrag] // Depends on handleDrag
++   );
++ 
++   const endDragInteraction = useCallback(() => {
++     if (isDragging.current) {
++       console.log(`[Draggable ${cardId}] endDragInteraction called`); // LOGGING
++       // Remove listeners
++       window.removeEventListener('mousemove', handleMouseMove);
++       window.removeEventListener('mouseup', handleMouseUpOrLeave);
++       window.removeEventListener('mouseleave', handleMouseUpOrLeave); // Ensure mouseleave also stops drag
++       window.removeEventListener('touchmove', handleTouchMove);
++       window.removeEventListener('touchend', handleTouchEndOrCancel);
++       window.removeEventListener('touchcancel', handleTouchEndOrCancel);
++ 
++       // Reset state
++       console.log(`[Draggable ${cardId}] Setting drag state false`); // LOGGING
++       isDragging.current = false;
++       setIsDraggingState(false);
++       touchIdentifier.current = null;
++       if (cardRef.current) {
++           cardRef.current.style.cursor = 'grab'; // Reset cursor
++       }
++       document.body.style.userSelect = ''; // Re-enable text selection
++     }
++   }, [
++     // Include stable handlers and cardId (for logging)
++     handleMouseMove,
++     handleMouseUpOrLeave, // Need this handler defined below
++     handleTouchMove,
++     handleTouchEndOrCancel, // Need this handler defined below
++     cardRef, // Need cardRef for cursor reset
++     cardId, // For logging
++   ]);
+  
+-   const handleMouseUp = useCallback(
++   const handleMouseUpOrLeave = useCallback(
+      (event: MouseEvent) => {
+        if (event.button === 0 && touchIdentifier.current === null) {
+-         // Call the function via the ref
+-         endDragRef.current?.();
++         endDragInteraction();
+        }
+      },
+-     [] // No dependencies needed as it only calls the ref
++     [endDragInteraction]
+    );
+  
+-   const handleTouchEnd = useCallback(
+-     (event: TouchEvent) => {
+-       let wasDraggingTouch = false;
+-       for (let i = 0; i < event.changedTouches.length; i++) {
+-         const t = event.changedTouches[i];
+-         if (t && t.identifier === touchIdentifier.current) {
+-           wasDraggingTouch = true;
+-           break;
+-         }
+-       }
+-       if (wasDraggingTouch) {
+-         // Call the function via the ref
+-         endDragRef.current?.();
++   const handleTouchEndOrCancel = useCallback(
++     (_event: TouchEvent) => {
++       if (touchIdentifier.current !== null) {
++         endDragInteraction();
+        }
+      },
+-     [] // No dependencies needed as it only calls the ref
+-   );
+- 
+-   // Now define endDrag
+-   const endDrag = useCallback(() => {
+-     if (!isDragging.current) return;
++     [endDragInteraction]
++   );
+  
+-     // Remove listeners using the stable callbacks defined above
+-     window.removeEventListener('mousemove', handleMouseMove);
+-     window.removeEventListener('mouseup', handleMouseUp);
+-     window.removeEventListener('touchmove', handleTouchMove);
+-     window.removeEventListener('touchend', handleTouchEnd);
+-     window.removeEventListener('touchcancel', handleTouchEnd); // Can reuse touchEnd here
+- 
+-     isDragging.current = false;
+-     setIsDraggingState(false);
+-     touchIdentifier.current = null;
+-     document.body.style.userSelect = '';
+-     if (cardRef.current) {
+-       cardRef.current.style.cursor = 'grab';
+-     }
+-     // Dependencies: only things *used inside* endDrag, not the functions calling it
+-   }, [cardRef, handleMouseMove, handleTouchMove, handleMouseUp, handleTouchEnd]);
+- 
+-   // Assign the latest endDrag function to the ref
++   // Add useEffect to ensure listeners are cleaned up if component unmounts while dragging
+    useEffect(() => {
+-     endDragRef.current = endDrag;
+-   }, [endDrag]);
+- 
+-   // --- startDrag now also attaches listeners --- //
+-   const startDrag = useCallback(
+-     (clientX: number, clientY: number, identifier?: number) => {
+-       if (!cardRef.current || !isEnabled || isDragging.current) return;
+- 
+-       bringToFront(cardId);
+-       isDragging.current = true;
+-       setIsDraggingState(true);
+- 
+-       if (identifier !== undefined) {
+-         touchIdentifier.current = identifier;
+-         // --- Attach Touch Listeners --- //
+-         window.addEventListener('touchmove', handleTouchMove, { passive: false }); // Need passive false for preventDefault
+-         window.addEventListener('touchend', handleTouchEnd);
+-         window.addEventListener('touchcancel', handleTouchEnd);
+-       } else {
+-         // --- Attach Mouse Listeners --- //
+-         window.addEventListener('mousemove', handleMouseMove);
+-         window.addEventListener('mouseup', handleMouseUp);
+-       }
+- 
+-       const pointerWorkspaceX = (clientX - pan.x) / zoom;
+-       const pointerWorkspaceY = (clientY - pan.y) / zoom;
+-       dragStartOffset.current = {
+-         x: pointerWorkspaceX - initialPosition.x,
+-         y: pointerWorkspaceY - initialPosition.y,
+-       };
+-       document.body.style.userSelect = 'none';
+-       cardRef.current.style.cursor = 'grabbing';
+-     },
+-     // Dependencies include the handlers that will be attached
+-     [cardId, initialPosition, cardRef, isEnabled, bringToFront, pan, zoom, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]
+-   );
++     return () => {
++       // Just in case the component unmounts mid-drag
++       if (isDragging.current) {
++         endDragInteraction();
++       }
++     };
++   }, [endDragInteraction]); // Dependency on the stable cleanup function
++ 
+  
+    // --- Element-Specific Event Handlers --- //
+-   // These just initiate the drag
++ 
+    const handleMouseDown = useCallback(
+-     (event: React.MouseEvent<T>) => {
++     (event: React.MouseEvent<SVGGElement>) => {
+        console.log(`[Draggable ${cardId}] handleMouseDown called`); // LOGGING
+        if (
+          !isEnabled ||
+          event.button !== 0 ||
+-         touchIdentifier.current !== null ||
++         touchIdentifier.current !== null || // Don't allow mouse drag if touch is active
+          !cardRef.current
+        ) {
+```
+
+```diff
+        }
+  
+-       event.stopPropagation();
++       // Check if the click originated on a resize handle (or potentially delete button)
++       const targetElement = event.target as Element;
++       if (targetElement.closest('[data-resize-handle="true"]')) {
++           console.log(`[Draggable ${cardId}] Clicked on resize handle, preventing drag.`); // LOGGING
++           return;
++       }
++       // Add similar check for delete button if needed
++ 
++       event.stopPropagation(); // Prevent pan/zoom if starting drag on card
+        bringToFront(cardId);
+  
+```
+
+```diff
+        setIsDraggingState(true);
+  
+-       const workspaceRect = cardRef.current.ownerSVGElement?.getBoundingClientRect();
+-       if (workspaceRect) {
++       // Calculate starting offset relative to card's top-left in workspace coords
+        const pointerWorkspaceX = (event.clientX - pan.x) / zoom;
+        const pointerWorkspaceY = (event.clientY - pan.y) / zoom;
+```
+
+```diff
+          y: pointerWorkspaceY - initialPosition.y,
+        };
+-       }
++ 
++       // Set styles and attach global listeners
+        document.body.style.userSelect = 'none';
+        cardRef.current.style.cursor = 'grabbing';
++       window.addEventListener('mousemove', handleMouseMove);
++       window.addEventListener('mouseup', handleMouseUpOrLeave);
++       window.addEventListener('mouseleave', handleMouseUpOrLeave);
+      },
+-     [cardId, initialPosition, cardRef, isEnabled, bringToFront, pan, zoom]
++     [
++       cardId, initialPosition, cardRef, isEnabled, bringToFront, pan, zoom,
++       handleMouseMove, handleMouseUpOrLeave // Need handlers for adding listeners
++     ]
+    );
+  
+    const handleTouchStart = useCallback(
+-     (event: React.TouchEvent) => {
+-       if ((event.target as Element).closest('[data-resize-handle="true"]') || event.touches.length !== 1 || !isEnabled) return;
++     (event: React.TouchEvent<SVGGElement>) => {
++       if (event.touches.length !== 1 || !isEnabled || isDragging.current ) return;
++ 
++       // Check if the touch originated on a resize handle
++       const targetElement = event.target as Element;
++       if (targetElement.closest('[data-resize-handle="true"]')) {
++           console.log(`[Draggable ${cardId}] Touched resize handle, preventing drag.`); // LOGGING
++           return;
++       }
++ 
++       event.stopPropagation(); // Prevent pan/zoom
++       bringToFront(cardId);
++ 
+        const touch = event.touches[0];
+-       if (!touch) return;
+-       event.stopPropagation();
+-       startDrag(touch.clientX, touch.clientY, touch.identifier);
+-     },
+-     [startDrag, isEnabled]
+-   );
++       if (!touch || !cardRef.current) return;
++ 
++       console.log(`[Draggable ${cardId}] Setting drag state true (touch)`); // LOGGING
++       isDragging.current = true;
++       setIsDraggingState(true);
++       touchIdentifier.current = touch.identifier;
+  
+-   // --- Cleanup Effect --- //
+-   // Ensure listeners are removed if component unmounts while dragging
+-   useEffect(() => {
+-     // Use the ref to ensure cleanup calls the latest endDrag
+-     const cleanup = () => {
+-         if (isDragging.current) {
+-             endDragRef.current?.();
+-         }
+-     };
+-     return cleanup;
+-   }, []); // Run only on mount/unmount
++       // Calculate starting offset
++       const pointerWorkspaceX = (touch.clientX - pan.x) / zoom;
++       const pointerWorkspaceY = (touch.clientY - pan.y) / zoom;
++       dragStartOffset.current = {
++         x: pointerWorkspaceX - initialPosition.x,
++         y: pointerWorkspaceY - initialPosition.y,
++       };
++ 
++       // Set styles and attach global listeners
++       document.body.style.userSelect = 'none';
++       cardRef.current.style.cursor = 'grabbing';
++       window.addEventListener('touchmove', handleTouchMove, { passive: false }); // passive: false to allow preventDefault
++       window.addEventListener('touchend', handleTouchEndOrCancel);
++       window.addEventListener('touchcancel', handleTouchEndOrCancel);
++     },
++     [
++       cardId, initialPosition, cardRef, isEnabled, bringToFront, pan, zoom,
++       handleTouchMove, handleTouchEndOrCancel // Need handlers for adding listeners
++     ]
++   );
+  
+    return {
+```
+
+---
+
+
+
+---
+
+It appears the previous attempts to modify `useDraggable.ts` were unsuccessful and introduced errors. Apologies for that!
+
+To ensure correctness, I'll replace the entire content of `src/hooks/useDraggable.ts` with a revised version that includes the necessary logging, corrects the type definitions, ensures proper dependency arrays for `useCallback`, and handles potential interactions with resize/delete elements.
+
+---
+
+
+
+---
+
+To ensure correctness, I'll replace the entire content of `src/hooks/useDraggable.ts` with a revised version that includes the necessary logging, corrects the type definitions, ensures proper dependency arrays for `useCallback`, and handles potential interactions with resize/delete elements.
+
+---
+
+```diff
+  import { useState, useCallback, useRef, RefObject, useEffect } from 'react';
+  import { useSetAtom, useAtomValue } from 'jotai';
+- import { updateCardPositionAtom, currentViewStateAtom, bringCardToFrontAtom } from '../state/atoms';
++ import {
++   updateCardPositionAtom,
++   currentViewStateAtom,
++   bringCardToFrontAtom,
++ } from '../state/atoms';
+  import type { Point, ViewState } from '../types';
+  
+```
+
+```diff
+    isEnabled: boolean;
+  }
++ 
++ interface DraggableProps {
++   onMouseDown: (event: React.MouseEvent<SVGGElement>) => void;
++   onTouchStart: (event: React.TouchEvent<SVGGElement>) => void;
++ }
++ 
++ interface UseDraggableReturn {
++   isDragging: boolean;
++   draggableProps: DraggableProps;
++ }
+  
+  export function useDraggable({
+```
+
+```diff
+    cardRef,
+    isEnabled,
+- }: UseDraggableProps) {
++ }: UseDraggableProps): UseDraggableReturn {
+    const [isDraggingState, setIsDraggingState] = useState(false);
+    const isDragging = useRef(false); // Internal flag using ref
+```
+
+```diff
+    // These need to be stable references, hence useCallback
+  
+-   const handleDrag = useCallback(
+-     (clientX: number, clientY: number) => {
+-       // Calculation remains the same
++   // Using useRef for handlers to avoid including them in dependency arrays
++   // of other hooks like useEffect or useCallback, ensuring stability.
++   const handleDragRef = useRef((_clientX: number, _clientY: number) => {});
++   const handleMouseMoveRef = useRef((_event: MouseEvent) => {});
++   const handleMouseUpOrLeaveRef = useRef((_event: MouseEvent) => {});
++   const handleTouchMoveRef = useRef((_event: TouchEvent) => {});
++   const handleTouchEndOrCancelRef = useRef((_event: TouchEvent) => {});
++   const endDragInteractionRef = useRef(() => {});
++ 
++   // Actual handler logic, stored in refs
++   handleDragRef.current = (clientX: number, clientY: number) => {
+      const pointerWorkspaceX = (clientX - pan.x) / zoom;
+      const pointerWorkspaceY = (clientY - pan.y) / zoom;
+      const newPositionX = pointerWorkspaceX - dragStartOffset.current.x;
+      const newPositionY = pointerWorkspaceY - dragStartOffset.current.y;
+      updatePosition({ cardId, position: { x: newPositionX, y: newPositionY } });
+-     },
+-     [cardId, updatePosition, pan, zoom] // Dependencies needed for calculation
+-   );
++   };
+  
+-   const handleMouseMove = useCallback(
+-     (event: MouseEvent) => {
++   handleMouseMoveRef.current = (event: MouseEvent) => {
+      if (isDragging.current && touchIdentifier.current === null) {
+-         handleDrag(event.clientX, event.clientY);
++       handleDragRef.current(event.clientX, event.clientY);
+      }
+-     },
+-     [handleDrag] // Depends on handleDrag
+-   );
++   };
+  
+-   const handleTouchMove = useCallback(
+-     (event: TouchEvent) => {
++   handleTouchMoveRef.current = (event: TouchEvent) => {
+      if (isDragging.current && touchIdentifier.current !== null) {
+        let activeTouch: Touch | null = null;
+```
+
+```diff
+        if (activeTouch) {
+          event.preventDefault(); // Prevent scrolling while dragging
+-           handleDrag(activeTouch.clientX, activeTouch.clientY);
+-         }
++         handleDragRef.current(activeTouch.clientX, activeTouch.clientY);
+        }
+-     },
+-     [handleDrag] // Depends on handleDrag
+-   );
++     }
++   };
+  
+-   const endDragInteraction = useCallback(() => {
++   endDragInteractionRef.current = () => {
+      if (isDragging.current) {
+        console.log(`[Draggable ${cardId}] endDragInteraction called`); // LOGGING
+-       // Remove listeners
+-       window.removeEventListener('mousemove', handleMouseMove);
+-       window.removeEventListener('mouseup', handleMouseUpOrLeave);
+-       window.removeEventListener('mouseleave', handleMouseUpOrLeave); // Ensure mouseleave also stops drag
+-       window.removeEventListener('touchmove', handleTouchMove);
+-       window.removeEventListener('touchend', handleTouchEndOrCancel);
+-       window.removeEventListener('touchcancel', handleTouchEndOrCancel);
++       // Remove listeners using the refs
++       window.removeEventListener('mousemove', handleMouseMoveRef.current);
++       window.removeEventListener('mouseup', handleMouseUpOrLeaveRef.current);
++       window.removeEventListener('mouseleave', handleMouseUpOrLeaveRef.current);
++       window.removeEventListener('touchmove', handleTouchMoveRef.current);
++       window.removeEventListener('touchend', handleTouchEndOrCancelRef.current);
++       window.removeEventListener('touchcancel', handleTouchEndOrCancelRef.current);
+  
+        // Reset state
+```
+
+```diff
+        document.body.style.userSelect = ''; // Re-enable text selection
+      }
+-   }, [
+-     // Include stable handlers and cardId (for logging)
+-     handleMouseMove,
+-     handleMouseUpOrLeave, // Need this handler defined below
+-     handleTouchMove,
+-     handleTouchEndOrCancel, // Need this handler defined below
+-     cardRef, // Need cardRef for cursor reset
+-     cardId, // For logging
+-   ]);
+- 
+-   const handleMouseUpOrLeave = useCallback(
+-     (event: MouseEvent) => {
++   };
++ 
++   handleMouseUpOrLeaveRef.current = (event: MouseEvent) => {
+      if (event.button === 0 && touchIdentifier.current === null) {
+-         endDragInteraction();
++       endDragInteractionRef.current();
+      }
+-     },
+-     [endDragInteraction]
+-   );
++   };
+  
+-   const handleTouchEndOrCancel = useCallback(
+-     (_event: TouchEvent) => {
++   handleTouchEndOrCancelRef.current = (_event: TouchEvent) => {
+      if (touchIdentifier.current !== null) {
+-         endDragInteraction();
++       endDragInteractionRef.current();
+      }
+-     },
+-     [endDragInteraction]
+-   );
++   };
+  
+    // Add useEffect to ensure listeners are cleaned up if component unmounts while dragging
+    useEffect(() => {
++     // Return the cleanup function
+      return () => {
+-       // Just in case the component unmounts mid-drag
+-       if (isDragging.current) {
+-         endDragInteraction();
+-       }
++       // Use the ref to ensure the *latest* cleanup logic is called
++       endDragInteractionRef.current();
+      };
+-   }, [endDragInteraction]); // Dependency on the stable cleanup function
+- 
++   }, []); // Empty array: Run cleanup only on unmount
+  
+    // --- Element-Specific Event Handlers --- //
+```
+
+```diff
+          !cardRef.current
+        ) {
+-         console.log(`[Draggable ${cardId}] handleMouseDown returning early`, { isEnabled, button: event.button, touchId: touchIdentifier.current, cardRefExists: !!cardRef.current }); // LOGGING
++         console.log(
++           `[Draggable ${cardId}] handleMouseDown returning early`,
++           {
++             isEnabled,
++             button: event.button,
++             touchId: touchIdentifier.current,
++             cardRefExists: !!cardRef.current,
++           }
++         );
+          return;
+        }
+  
+-       // Check if the click originated on a resize handle (or potentially delete button)
++       // Check if the click originated on a resize handle or delete button
+        const targetElement = event.target as Element;
+-       if (targetElement.closest('[data-resize-handle="true"]')) {
+-           console.log(`[Draggable ${cardId}] Clicked on resize handle, preventing drag.`); // LOGGING
++       if (targetElement.closest('[style*="cursor: nwse-resize"], [aria-label="delete card"]')) {
++         console.log(
++           `[Draggable ${cardId}] Clicked on handle/button, preventing drag.`
++         ); // LOGGING
+          return;
+        }
+-       // Add similar check for delete button if needed
+  
+        event.stopPropagation(); // Prevent pan/zoom if starting drag on card
+```
+
+```diff
+        };
+  
+-       // Set styles and attach global listeners
++       // Set styles and attach global listeners using refs
+        document.body.style.userSelect = 'none';
+        cardRef.current.style.cursor = 'grabbing';
+-       window.addEventListener('mousemove', handleMouseMove);
+-       window.addEventListener('mouseup', handleMouseUpOrLeave);
+-       window.addEventListener('mouseleave', handleMouseUpOrLeave);
++       window.addEventListener('mousemove', handleMouseMoveRef.current);
++       window.addEventListener('mouseup', handleMouseUpOrLeaveRef.current);
++       window.addEventListener('mouseleave', handleMouseUpOrLeaveRef.current);
+      },
+      [
+-       cardId, initialPosition, cardRef, isEnabled, bringToFront, pan, zoom,
+-       handleMouseMove, handleMouseUpOrLeave // Need handlers for adding listeners
++       cardId,
++       initialPosition,
++       cardRef,
++       isEnabled,
++       bringToFront,
++       pan,
++       zoom,
++       // Refs are stable, no need to include handleMouseMoveRef etc. here
+      ]
+    );
+  
+    const handleTouchStart = useCallback(
+      (event: React.TouchEvent<SVGGElement>) => {
+-       if (event.touches.length !== 1 || !isEnabled || isDragging.current ) return;
++       if (event.touches.length !== 1 || !isEnabled || isDragging.current) return;
+  
+-       // Check if the touch originated on a resize handle
++       // Check if the touch originated on a resize handle or delete button
+        const targetElement = event.target as Element;
+-       if (targetElement.closest('[data-resize-handle="true"]')) {
+-           console.log(`[Draggable ${cardId}] Touched resize handle, preventing drag.`); // LOGGING
++       if (targetElement.closest('[style*="cursor: nwse-resize"], [aria-label="delete card"]')) {
++         console.log(
++           `[Draggable ${cardId}] Touched handle/button, preventing drag.`
++         ); // LOGGING
+          return;
+        }
+```
+
+```diff
+        };
+  
+-       // Set styles and attach global listeners
++       // Set styles and attach global listeners using refs
+        document.body.style.userSelect = 'none';
+        cardRef.current.style.cursor = 'grabbing';
+-       window.addEventListener('touchmove', handleTouchMove, { passive: false }); // passive: false to allow preventDefault
+-       window.addEventListener('touchend', handleTouchEndOrCancel);
+-       window.addEventListener('touchcancel', handleTouchEndOrCancel);
++       window.addEventListener('touchmove', handleTouchMoveRef.current, { passive: false });
++       window.addEventListener('touchend', handleTouchEndOrCancelRef.current);
++       window.addEventListener('touchcancel', handleTouchEndOrCancelRef.current);
+      },
+      [
+-       cardId, initialPosition, cardRef, isEnabled, bringToFront, pan, zoom,
+-       handleTouchMove, handleTouchEndOrCancel // Need handlers for adding listeners
++       cardId,
++       initialPosition,
++       cardRef,
++       isEnabled,
++       bringToFront,
++       pan,
++       zoom,
++       // Refs are stable, no need to include handleTouchMoveRef etc. here
+      ]
+    );
+```
+
+---
+
+Okay, the entire `useDraggable.ts` hook has been replaced with the revised version. This version uses `useRef` to store the event handler functions, which avoids potential issues with stale closures and complex dependency arrays in `useCallback`. It also includes the logging we added earlier and checks to prevent dragging if the interaction starts on the resize handle or delete button.
+
+Please try the dragging behavior again, specifically the scenario where you drag one card, then another, then the first one again. Check the browser console logs as you perform these actions. Let me know if the "two-click" issue persists and what the logs show during the problematic second attempt to drag the first card.
+
+---
+
+_**User**_
+
+Unfortunately, the behavior persists.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, that's unexpected. The refactoring using refs for handlers should have eliminated most issues related to stale state or improper cleanup between drags.
+
+To figure out what's happening on that problematic first click, could you please perform the sequence again:
+1.  Drag Card A.
+2.  Drag Card B.
+3.  Click (once) on Card A.
+
+And then share the console logs that appear *immediately after* that single click in step 3?
+
+We're specifically looking for:
+*   The `[Card <ID>] onClick, isEditing: ...` log from `Card.tsx`.
+*   Any logs from `useDraggable.ts` for Card A, especially `[Draggable <ID>] handleMouseDown called` and potentially `handleMouseDown returning early` or `Clicked on handle/button`.
+
+This should tell us if the click is even registering on the card component and, if so, whether the drag hook is prematurely exiting and why.
+
+---
+
+_**User**_
+
+Here are the logs. Note that these all appeared before the mouse button was released. No logs followed upon the release of the button:
+
+```
+useDraggable.ts:129 [Draggable 640efea4-83ce-4d05-9503-4be2e038cc47] handleMouseDown called
+useDraggable.ts:163 [Draggable 640efea4-83ce-4d05-9503-4be2e038cc47] Setting drag state true
+useDraggable.ts:87 [Draggable 640efea4-83ce-4d05-9503-4be2e038cc47] endDragInteraction called
+useDraggable.ts:95 [Draggable 640efea4-83ce-4d05-9503-4be2e038cc47] Setting drag state false
+```
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, thank you for providing those logs. This sequence is very telling:
+
+1.  `handleMouseDown called` - Good, interaction starts.
+2.  `Setting drag state true` - Good, hook prepares for dragging.
+3.  `endDragInteraction called` - **Problem:** The cleanup logic runs immediately.
+4.  `Setting drag state false` - **Problem:** Drag state is reset *while the mouse button is still down*.
+
+This confirms that the drag interaction is being initiated but then immediately cancelled by the `endDragInteraction` function. Since the mouse button is still held down, it's not a normal `mouseup` or `mouseleave` triggering this.
+
+The most likely cause is a rapid re-render triggered by a state change within `handleMouseDown` itself, which somehow causes the `useEffect` cleanup in `useDraggable` to fire unexpectedly. The prime candidate for this state change is the `bringToFront(cardId)` call. This updates the `interactionOrderAtom`, which is used by the parent `Workspace` component to sort and render the cards.
+
+It's possible that React's reconciliation process, upon seeing the re-sorted list in the `Workspace`, is briefly unmounting and remounting the `Card` component you're trying to drag, even though it has a stable `key`. This unmount would trigger the `useEffect` cleanup in `useDraggable`, prematurely ending the drag.
+
+**Let's test this hypothesis:**
+
+I will temporarily comment out the `bringToFront(cardId)` line within `handleMouseDown` in `src/hooks/useDraggable.ts`. If this fixes the "two-click" issue, we've found the cause (though we'll need to find a different way to handle bringing cards to the front).
+
+---
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom if starting drag on card
+-       bringToFront(cardId);
++       // bringToFront(cardId); // <<< Temporarily comment out to test hypothesis
+  
+        console.log(`[Draggable ${cardId}] Setting drag state true`); // LOGGING
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom
+-       bringToFront(cardId);
++       // bringToFront(cardId); // <<< Temporarily comment out to test hypothesis
+  
+        const touch = event.touches[0];
+```
+
+---
+
+Okay, I've commented out the `bringToFront` calls in both `handleMouseDown` and `handleTouchStart`.
+
+Please try the drag sequence again (drag A, drag B, click A). Does the first click on Card A now successfully initiate the drag without needing a second click? (Note: Card A won't visually pop to the front during this test).
+
+---
+
+_**User**_
+
+Yes.  Now, the drag works propperly.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Excellent! That confirms our theory: the `bringToFront` state update was causing a re-render that interfered with the drag initialization.
+
+Now, let's restore the bring-to-front functionality in a way that doesn't break the drag. We can achieve this by delaying the `bringToFront` call until the first actual movement occurs during the drag (i.e., inside the `mousemove` or `touchmove` handler), rather than calling it immediately on `mousedown`/`touchstart`.
+
+Here's the plan:
+1.  Re-enable the `bringToFront` call (remove the comments).
+2.  Introduce a new ref (`didBringToFrontRef`) to track if we've already brought the card to the front during the current drag interaction.
+3.  In `handleMouseDown` and `handleTouchStart`, reset `didBringToFrontRef.current = false;`.
+4.  Move the `bringToFront(cardId)` call from `handleMouseDown`/`handleTouchStart` into `handleDragRef.current`. It will only execute if `didBringToFrontRef.current` is `false`, and then set the ref to `true`.
+5.  Reset `didBringToFrontRef` in `endDragInteractionRef.current`.
+
+Let's modify `src/hooks/useDraggable.ts`.
+
+---
+
+```diff
+    const dragStartOffset = useRef<Point>({ x: 0, y: 0 });
+    const touchIdentifier = useRef<number | null>(null);
++   const didBringToFrontRef = useRef(false); // Ref to track bringToFront status
+  
+    const { pan, zoom } = useAtomValue(currentViewStateAtom);
+```
+
+```diff
+    // Actual handler logic, stored in refs
+    handleDragRef.current = (clientX: number, clientY: number) => {
++     // Bring to front on first actual drag movement
++     if (!didBringToFrontRef.current) {
++       bringToFront(cardId);
++       didBringToFrontRef.current = true;
++     }
++ 
+      const pointerWorkspaceX = (clientX - pan.x) / zoom;
+      const pointerWorkspaceY = (clientY - pan.y) / zoom;
+      const newPositionX = pointerWorkspaceX - dragStartOffset.current.x;
+      const newPositionY = pointerWorkspaceY - dragStartOffset.current.y;
+      updatePosition({ cardId, position: { x: newPositionX, y: newPositionY } });
++ 
++     if (isDragging.current && touchIdentifier.current === null) {
++       handleDragRef.current(clientX, clientY);
++     }
+    };
+  
+```
+
+```diff
+        setIsDraggingState(false);
+        touchIdentifier.current = null;
++       didBringToFrontRef.current = false; // Reset bringToFront status
+        if (cardRef.current) {
+          cardRef.current.style.cursor = 'grab'; // Reset cursor
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom if starting drag on card
+-       // bringToFront(cardId); // <<< Temporarily comment out to test hypothesis
++       // bringToFront(cardId); // Moved to handleDragRef
+  
+        console.log(`[Draggable ${cardId}] Setting drag state true`); // LOGGING
+        isDragging.current = true;
+        setIsDraggingState(true);
++       didBringToFrontRef.current = false; // Reset for new drag
+  
+        // Calculate starting offset relative to card's top-left in workspace coords
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom
+-       // bringToFront(cardId); // <<< Temporarily comment out to test hypothesis
++       // bringToFront(cardId); // Moved to handleDragRef
+  
+        const touch = event.touches[0];
+```
+
+```diff
+        setIsDraggingState(true);
+        touchIdentifier.current = touch.identifier;
++       didBringToFrontRef.current = false; // Reset for new drag
+  
+        // Calculate starting offset
+```
+
+---
+
+Okay, I've modified `useDraggable.ts` to delay the `bringToFront` call until the first drag movement happens.
+
+This should restore the bring-to-front behavior while avoiding the conflict with drag initialization that caused the "two-click" issue. Please test the drag behavior again, including the sequence that was previously problematic. It should now work correctly on the first click, and the dragged card should pop to the front as soon as you start moving it.
+
+---
+
+_**User**_
+
+Now it looks like the call stack is being blown out:
+
+```
+[Draggable 3ffed3dc-9fdf-41ec-bbc7-1bf92908b9db] handleMouseDown called
+useDraggable.ts:173 [Draggable 3ffed3dc-9fdf-41ec-bbc7-1bf92908b9db] Setting drag state true
+internals.mjs:379 Uncaught RangeError: Maximum call stack size exceeded
+    at internals.mjs:379:16
+    at setter (internals.mjs:357:11)
+    at Object.defaultWrite [as write] (vanilla.mjs:24:18)
+    at vanilla.mjs:49:20
+    at internals.mjs:373:9
+    at setter (internals.mjs:365:11)
+    at Object.write (utils.mjs:475:52)
+    at vanilla.mjs:49:20
+    at internals.mjs:373:9
+    at setter (internals.mjs:365:11)
+(anonymous) @ internals.mjs:379
+setter @ internals.mjs:357
+defaultWrite @ vanilla.mjs:24
+(anonymous) @ vanilla.mjs:49
+(anonymous) @ internals.mjs:373
+setter @ internals.mjs:365
+(anonymous) @ utils.mjs:475
+(anonymous) @ vanilla.mjs:49
+(anonymous) @ internals.mjs:373
+setter @ internals.mjs:365
+(anonymous) @ atoms.ts:223
+(anonymous) @ vanilla.mjs:49
+(anonymous) @ internals.mjs:373
+set @ internals.mjs:509
+(anonymous) @ react.mjs:154
+handleDragRef.current @ useDraggable.ts:66
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68Understand this error
+utils.mjs:462 Uncaught RangeError: Maximum call stack size exceeded
+    at Object.write (utils.mjs:462:12)
+    at vanilla.mjs:49:20
+    at internals.mjs:373:9
+    at setter (internals.mjs:365:11)
+    at Object.write (atoms.ts:223:5)
+    at vanilla.mjs:49:20
+    at internals.mjs:373:9
+    at Object.set (internals.mjs:509:11)
+    at react.mjs:154:19
+    at handleDragRef.current (useDraggable.ts:66:5)
+(anonymous) @ utils.mjs:462
+(anonymous) @ vanilla.mjs:49
+(anonymous) @ internals.mjs:373
+setter @ internals.mjs:365
+(anonymous) @ atoms.ts:223
+(anonymous) @ vanilla.mjs:49
+(anonymous) @ internals.mjs:373
+set @ internals.mjs:509
+(anonymous) @ react.mjs:154
+handleDragRef.current @ useDraggable.ts:66
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68
+handleDragRef.current @ useDraggable.ts:68Understand this error
+useDraggable.ts:98 [Draggable 3ffed3dc-9fdf-41ec-bbc7-1bf92908b9db] endDragInteraction called
+useDraggable.ts:106 [Draggable 3ffed3dc-9fdf-41ec-bbc7-1bf92908b9db] Setting drag state false
+```
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Ah, you're absolutely right! Looking at the error trace and the previous edit, I see the problem. During the last modification, an erroneous `if` block was added inside the `handleDragRef.current` function:
+
+```javascript
+  handleDragRef.current = (clientX: number, clientY: number) => {
+    // ... (bring to front logic) ...
+    // ... (calculate position logic) ...
+    updatePosition({ cardId, position: { x: newPositionX, y: newPositionY } });
+
+    // THIS BLOCK IS WRONG - IT CAUSES INFINITE RECURSION
+    if (isDragging.current && touchIdentifier.current === null) {
+      handleDragRef.current(clientX, clientY); // Calls itself!
+    }
+  };
+```
+
+This `if` block causes `handleDragRef.current` to call itself repeatedly whenever it's invoked by a mouse move, leading directly to the "Maximum call stack size exceeded" error.
+
+I apologize for that mistake! Let's remove that incorrect recursive call.
+
+---
+
+```diff
+      const newPositionY = pointerWorkspaceY - dragStartOffset.current.y;
+      updatePosition({ cardId, position: { x: newPositionX, y: newPositionY } });
+- 
+-     if (isDragging.current && touchIdentifier.current === null) {
+-       handleDragRef.current(clientX, clientY);
+-     }
+    };
+  
+```
+
+---
+
+Okay, the incorrect recursive call within `handleDragRef.current` has been removed.
+
+This should resolve the stack overflow error. Please try dragging again. Everything should now work as intended: drags initiate on the first click, and the card comes to the front smoothly on the first movement.
+
+---
+
+_**User**_
+
+Looks like the bug has returned.
+
+Upon re-clicking on a card to drag it, I see these logs:
+
+```
+[Draggable 3ffed3dc-9fdf-41ec-bbc7-1bf92908b9db] handleMouseDown called
+useDraggable.ts:169 [Draggable 3ffed3dc-9fdf-41ec-bbc7-1bf92908b9db] Setting drag state true
+```
+then when I start the drag, these appear:
+
+```
+[Draggable 3ffed3dc-9fdf-41ec-bbc7-1bf92908b9db] endDragInteraction called
+useDraggable.ts:102 [Draggable 3ffed3dc-9fdf-41ec-bbc7-1bf92908b9db] Setting drag state false
+```
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, this is frustrating. The logs show the exact same pattern as before: the drag starts correctly, but the moment the first movement occurs (triggering `handleDragRef.current`, which now calls `bringToFront`), the interaction immediately ends.
+
+This strongly reinforces the hypothesis that the state update caused by `bringToFront` (which changes the `interactionOrderAtom`) is forcing a re-render in the parent `Workspace` component in such a way that the `Card` component you are dragging gets unmounted and remounted. This unmount triggers the `useEffect` cleanup in `useDraggable`, which calls `endDragInteraction`, killing the drag prematurely.
+
+Delaying `bringToFront` to the first move wasn't enough separation.
+
+Let's investigate how the `Workspace` renders the cards and if the `Card` component itself is optimized against unnecessary re-renders using `React.memo`.
+
+First, I'll read `src/components/Workspace.tsx` to check the rendering logic.
+
+---
+
+Read file: src/components/Workspace.tsx
+
+---
+
+The `Workspace` component correctly uses the `interactionOrder` to create a `sortedCardIds` array and then maps over this array to render the `<Card>` components, crucially providing a stable `key={cardId}` prop to each. This *should* typically allow React to avoid unmounting/remounting when the order changes.
+
+Now, let's check if the `Card` component itself is memoized. I'll read `src/components/Card.tsx`.
+
+---
+
+Read file: src/components/Card.tsx
+
+---
+
+As suspected, the `Card` component is defined as a standard function component:
+
+```javascript
+function Card({ cardId }: CardProps) {
+  // ... component logic ...
+}
+
+export default Card;
+```
+
+It is *not* wrapped in `React.memo`. This means that every time the parent `Workspace` re-renders (which happens when `interactionOrder` changes due to `bringToFront`), React will re-render *all* `Card` components, even if their individual props (`cardId`) haven't changed. While the stable `key` prop *should* prevent full unmount/remount, complex interactions with hooks and refs inside the child can sometimes still lead to unexpected behavior or cleanup triggers during reconciliation, especially if the component's position in the list changes.
+
+Let's wrap the `Card` component in `React.memo`. This tells React to skip re-rendering the component if its props have not changed, which should make the rendering more stable when the `interactionOrder` changes.
+
+---
+
+```diff
+  }
+  
+- function Card({ cardId }: CardProps) {
++ // Wrap the component function definition in React.memo
++ const Card = React.memo(function Card({ cardId }: CardProps) {
+    const cards = useAtomValue(currentCardsAtom);
+    const cardData = cards[cardId];
+```
+
+```diff
+      </g>
+    );
+- }
++ });
+  
+  export default Card; 
+```
+
+---
+
+Okay, the `Card` component is now wrapped in `React.memo`. This optimization should prevent it from re-rendering unnecessarily when only the order changes in the parent `Workspace`.
+
+Please test the drag-and-drop sequence one more time. With this change, the `bringToFront` call (happening on the first mouse move) should hopefully no longer interfere with the drag operation. Let me know the result!
+
+---
+
+_**User**_
+
+The current behavior is identical. I should note that the card moves slightly before the noted logs appear about the drag state being set to false appear and the drag stops.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, this behavior is indeed stubborn. Despite `React.memo`, it seems the state update triggered by `bringToFront` (even when delayed to the first move) is still somehow causing the drag interaction to terminate prematurely. The fact that the card moves slightly confirms `handleDragRef.current` runs at least once, calls `bringToFront`, and then the cleanup immediately follows.
+
+Since `React.memo` didn't solve it, let's try a different timing strategy. Instead of calling `bringToFront` during the `mousemove` (which happens many times), let's try calling it back on the initial `mousedown`/`touchstart`, but defer its execution slightly using `setTimeout` with a zero delay. This pushes the state update outside the immediate event handler's execution context, which might prevent it from interfering with the drag listeners being set up or the initial drag state.
+
+Plan:
+1.  Remove the `didBringToFrontRef` and the logic calling `bringToFront` from `handleDragRef.current`.
+2.  Add the `bringToFront(cardId)` call back into `handleMouseDown` and `handleTouchStart`, but wrap it in `setTimeout(() => { bringToFront(cardId); }, 0);`.
+
+Let's modify `src/hooks/useDraggable.ts` again.
+
+---
+
+```diff
+    const dragStartOffset = useRef<Point>({ x: 0, y: 0 });
+    const touchIdentifier = useRef<number | null>(null);
+-   const didBringToFrontRef = useRef(false); // Ref to track bringToFront status
+  
+    const { pan, zoom } = useAtomValue(currentViewStateAtom);
+```
+
+```diff
+    // Actual handler logic, stored in refs
+    handleDragRef.current = (clientX: number, clientY: number) => {
+-     // Bring to front on first actual drag movement
+-     if (!didBringToFrontRef.current) {
+-       bringToFront(cardId);
+-       didBringToFrontRef.current = true;
+-     }
+- 
+      const pointerWorkspaceX = (clientX - pan.x) / zoom;
+      const pointerWorkspaceY = (clientY - pan.y) / zoom;
+```
+
+```diff
+        setIsDraggingState(false);
+        touchIdentifier.current = null;
+-       didBringToFrontRef.current = false; // Reset bringToFront status
+        if (cardRef.current) {
+          cardRef.current.style.cursor = 'grab'; // Reset cursor
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom if starting drag on card
+-       // bringToFront(cardId); // Moved to handleDragRef
++       // Schedule bringToFront slightly deferred
++       setTimeout(() => {
++         bringToFront(cardId);
++       }, 0);
+  
+        console.log(`[Draggable ${cardId}] Setting drag state true`); // LOGGING
+        isDragging.current = true;
+        setIsDraggingState(true);
+-       didBringToFrontRef.current = false; // Reset for new drag
+  
+        // Calculate starting offset relative to card's top-left in workspace coords
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom
+-       // bringToFront(cardId); // Moved to handleDragRef
++       // Schedule bringToFront slightly deferred
++       setTimeout(() => {
++         bringToFront(cardId);
++       }, 0);
+  
+        const touch = event.touches[0];
+```
+
+```diff
+        setIsDraggingState(true);
+        touchIdentifier.current = touch.identifier;
+-       didBringToFrontRef.current = false; // Reset for new drag
+  
+        // Calculate starting offset
+```
+
+---
+
+Okay, `useDraggable.ts` has been updated. The `bringToFront` call is now back in `handleMouseDown` and `handleTouchStart`, but wrapped in `setTimeout(..., 0)` to defer its execution slightly. The temporary `didBringToFrontRef` has been removed.
+
+Let's see if this timing adjustment finally resolves the conflict. Please try the drag sequence again.
+
+---
+
+_**User**_
+
+The behavior remains unchanged
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+This is quite perplexing. Deferring the state update with `setTimeout` should have prevented it from directly interfering with the event listener setup. The fact that the drag still terminates suggests the issue might be deeper, possibly related to how React schedules updates or how Jotai propagates state changes, especially when multiple updates happen in quick succession (`updatePosition` on move and `bringToFront` from the timeout).
+
+Let's try the standard React way of handling side effects triggered by state changes: using `useEffect`. We can trigger the `bringToFront` call in a `useEffect` hook that runs only when the `isDraggingState` becomes `true`.
+
+**Plan:**
+1.  Remove the `setTimeout(() => { bringToFront(cardId); }, 0);` calls from `handleMouseDown` and `handleTouchStart`.
+2.  Add a `useEffect` hook that depends on `isDraggingState`.
+3.  Inside this `useEffect`, if `isDraggingState` is `true`, call `bringToFront(cardId)`.
+
+This ensures `bringToFront` happens *after* the render cycle where the component acknowledges it's being dragged.
+
+Modify `src/hooks/useDraggable.ts`.
+
+---
+
+```diff
+      };
+    }, []); // Empty array: Run cleanup only on unmount
++ 
++   // Effect to bring card to front when dragging starts
++   useEffect(() => {
++     if (isDraggingState) {
++       console.log(`[Draggable ${cardId}] useEffect triggering bringToFront`); // LOGGING
++       bringToFront(cardId);
++     }
++     // We only want this to run when isDraggingState *becomes* true.
++     // Adding bringToFront or cardId to deps could cause issues if they change mid-drag.
++   }, [isDraggingState, bringToFront, cardId]); // Depend on dragging state
+  
+    // --- Element-Specific Event Handlers --- //
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom if starting drag on card
+-       // Schedule bringToFront slightly deferred
+-       setTimeout(() => {
+-         bringToFront(cardId);
+-       }, 0);
+  
+        console.log(`[Draggable ${cardId}] Setting drag state true`); // LOGGING
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom
+-       // Schedule bringToFront slightly deferred
+-       setTimeout(() => {
+-         bringToFront(cardId);
+-       }, 0);
+- 
+-       const touch = event.touches[0];
+-       if (!touch || !cardRef.current) return;
+  
+        console.log(`[Draggable ${cardId}] Setting drag state true (touch)`); // LOGGING
+        isDragging.current = true;
+        setIsDraggingState(true);
+-       touchIdentifier.current = touch.identifier;
++       touchIdentifier.current = event.touches[0].identifier;
+  
+        // Calculate starting offset
+-       const pointerWorkspaceX = (touch.clientX - pan.x) / zoom;
+-       const pointerWorkspaceY = (touch.clientY - pan.y) / zoom;
++       const pointerWorkspaceX = (event.touches[0].clientX - pan.x) / zoom;
++       const pointerWorkspaceY = (event.touches[0].clientY - pan.y) / zoom;
+        dragStartOffset.current = {
+          x: pointerWorkspaceX - initialPosition.x,
+```
+
+---
+
+It seems the last edit, while removing the `setTimeout`, also introduced some unrelated changes and potential null errors in the `handleTouchStart` function by directly accessing `event.touches[0]` without ensuring it exists.
+
+I will fix these errors and ensure only the intended change (moving `bringToFront` to `useEffect`) is applied.
+
+---
+
+```diff
+        bringToFront(cardId);
+      }
+-     // We only want this to run when isDraggingState *becomes* true.
+-     // Adding bringToFront or cardId to deps could cause issues if they change mid-drag.
++     // isDraggingState changes from false to true -> bring card to front.
++     // bringToFront and cardId should be stable for a given card instance.
+    }, [isDraggingState, bringToFront, cardId]); // Depend on dragging state
+  
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom if starting drag on card
++       // bringToFront is now handled by useEffect based on isDraggingState
+  
+        console.log(`[Draggable ${cardId}] Setting drag state true`); // LOGGING
+```
+
+```diff
+        // Set styles and attach global listeners using refs
+        document.body.style.userSelect = 'none';
++       // Check cardRef.current again just before accessing style
++       if (cardRef.current) {
+          cardRef.current.style.cursor = 'grabbing';
++       }
+        window.addEventListener('mousemove', handleMouseMoveRef.current);
+        window.addEventListener('mouseup', handleMouseUpOrLeaveRef.current);
+```
+
+```diff
+        cardRef,
+        isEnabled,
+-       bringToFront,
+        pan,
+        zoom,
+```
+
+```diff
+  
+        event.stopPropagation(); // Prevent pan/zoom
++       // bringToFront is now handled by useEffect based on isDraggingState
++ 
++       const touch = event.touches[0];
++       // Add null check for touch and cardRef
++       if (!touch || !cardRef.current) return;
+  
+        console.log(`[Draggable ${cardId}] Setting drag state true (touch)`); // LOGGING
+        isDragging.current = true;
+        setIsDraggingState(true);
+-       touchIdentifier.current = event.touches[0].identifier;
++       touchIdentifier.current = touch.identifier;
+  
+        // Calculate starting offset
+-       const pointerWorkspaceX = (event.touches[0].clientX - pan.x) / zoom;
+-       const pointerWorkspaceY = (event.touches[0].clientY - pan.y) / zoom;
++       const pointerWorkspaceX = (touch.clientX - pan.x) / zoom;
++       const pointerWorkspaceY = (touch.clientY - pan.y) / zoom;
+        dragStartOffset.current = {
+          x: pointerWorkspaceX - initialPosition.x,
+```
+
+```diff
+        // Set styles and attach global listeners using refs
+        document.body.style.userSelect = 'none';
++       // Check cardRef.current again just before accessing style
++       if (cardRef.current) {
+          cardRef.current.style.cursor = 'grabbing';
++       }
+        window.addEventListener('touchmove', handleTouchMoveRef.current, { passive: false });
+        window.addEventListener('touchend', handleTouchEndOrCancelRef.current);
+```
+
+```diff
+        cardRef,
+        isEnabled,
+-       bringToFront,
+        pan,
+        zoom,
+```
+
+---
+
+Okay, the potential null errors in `handleTouchStart` have been fixed, and the `bringToFront` call is now cleanly handled within the `useEffect` hook based on `isDraggingState`.
+
+This is the standard React pattern for triggering side effects based on state changes. Let's hope this finally resolves the interaction issue. Please try the drag sequence one last time.
+
+---
+
+_**User**_
+
+Still no change in behavior.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+Okay, this is indeed proving resistant to the usual solutions. The interaction between the drag state, the Jotai state update for ordering, and React's render cycle seems to be causing this persistent issue, even with `React.memo` and various timing strategies for the `bringToFront` call.
+
+Since directly updating the state atom (`interactionOrderAtom`) during the drag seems to be the core problem, let's try a different approach:
+
+1.  **Visual Indication Only During Drag:** When a card starts dragging, we *won't* update the `interactionOrderAtom` immediately. Instead, we'll apply a purely visual style change to the card (like a drop shadow or thicker border) to indicate it's active, using the `isDragging` state from the hook.
+2.  **Update State After Drag:** When the drag interaction *completes* (on mouse up/touch end), *then* we will call `bringToFront(cardId)` to update the actual state atom and persist the new order.
+
+This completely separates the state update that causes the list re-render from the active drag operation.
+
+**Let's implement this:**
+
+**1. Modify `useDraggable.ts`:**
+    *   Remove the `useEffect` hook that calls `bringToFront`.
+    *   Add the `bringToFront(cardId)` call inside the `endDragInteractionRef.current` function, right before the state is reset.
+
+---
+
+```diff
+      if (isDragging.current) {
+        console.log(`[Draggable ${cardId}] endDragInteraction called`); // LOGGING
++ 
++       // Call bringToFront *before* resetting state and removing listeners
++       bringToFront(cardId);
++ 
+        // Remove listeners using the refs
+        window.removeEventListener('mousemove', handleMouseMoveRef.current);
+```
+
+```diff
+      };
+    }, []); // Empty array: Run cleanup only on unmount
+- 
+-   // Effect to bring card to front when dragging starts
+-   useEffect(() => {
+-     if (isDraggingState) {
+-       console.log(`[Draggable ${cardId}] useEffect triggering bringToFront`); // LOGGING
+-       bringToFront(cardId);
+-     }
+-     // isDraggingState changes from false to true -> bring card to front.
+-     // bringToFront and cardId should be stable for a given card instance.
+-   }, [isDraggingState, bringToFront, cardId]); // Depend on dragging state
+  
+    // --- Element-Specific Event Handlers --- //
+```
+
+---
+
+**2. Modify `Card.tsx`:**
+    *   Add a visual style (e.g., a subtle drop-shadow filter) to the main `<g>` element when `isDragging` is true.
+
+---
+
+```diff
+          cursor: isEditing ? 'default' : 'grab',
+          opacity: isDragging ? 0.8 : 1,
+-         transition: 'transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28)', // Example transition
++         transition: 'transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28), filter 0.2s ease-out', // Add filter transition
+          transformOrigin: `${currentSize.width / 2}px ${currentSize.height / 2}px`,
++         // Apply drop shadow when dragging for visual feedback
++         filter: isDragging ? 'drop-shadow( 3px 5px 4px rgba(0,0,0,0.3))' : 'none',
+        }}
+      >
+```
+
+---
+
+Okay, the changes are applied.
+
+*   `useDraggable` now only calls `bringToFront` when the drag operation *ends*.
+*   `Card` now applies a drop-shadow filter while being dragged (`isDragging` is true) to give visual feedback instead of relying on the immediate order change.
+
+This separation *should* finally prevent the premature termination of the drag interaction. Please test the drag behavior thoroughly again.
+
+---
+
+_**User**_
+
+Yes, now the behavior seems to be working.
+
+One quirk is that the bring-to-front happens after release. Is it possible to do this one the click starts, or was doing that the source of the bug?
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+You are absolutely right to ask! Yes, trying to call `bringToFront` (which updates the global state atom `interactionOrderAtom`) immediately on `mousedown` or `touchstart` *was* the source of the bug. Even with optimizations like `React.memo` and deferring with `setTimeout` or `useEffect`, updating the card order while simultaneously initializing the drag interaction caused React/Jotai to interrupt the process, likely by unmounting/remounting the component being dragged.
+
+The current approach (visual indicator during drag, state update on release) is the most stable way we found to prevent that specific bug.
+
+**Simulating the "Pop-on-Click":**
+
+While we can't reliably update the *actual* order state on click without risking the bug, we can enhance the *visual* feedback when the drag starts (`mousedown`/`touchstart`) to make it *feel* like it's popping forward immediately.
+
+We already have the drop shadow activating when `isDragging` becomes true. We can add a slight scale increase at the same time.
+
+Let's modify the `style` in `Card.tsx` to add a small scale-up (e.g., to `scale(1.02)` relative to its base scale) when `isDragging` is true. This, combined with the drop shadow, should give a stronger immediate visual cue.
+
+---
+
+```diff
+      <g
+        ref={cardRef}
+-       transform={`${cardTransform} scale(${scale})`}
++       transform={`${cardTransform} scale(${isDragging ? scale * 1.02 : scale})`}
+        data-draggable-card="true"
+        {...draggableProps}
+```
+
+---
+
+Okay, I've adjusted the `transform` style in `Card.tsx`. Now, when `isDragging` becomes true (which happens on `mousedown`), the card will scale up slightly (by 2%) in addition to getting the drop shadow.
+
+This should provide immediate visual feedback that feels like the card is popping forward, while still delaying the actual state update for the order until the drag completes, thus avoiding the original bug. Give it a try!
+
+---
+
+_**User**_
+
+It seems that the behavor is unchanged.
+
+---
+
+_**Assistant**_
+
+
+
+---
+
+
+
+---
+
+
+
+---
+
+
+
+---
+

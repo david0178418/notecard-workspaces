@@ -26,7 +26,8 @@ interface CardProps {
   cardId: string;
 }
 
-function Card({ cardId }: CardProps) {
+// Wrap the component function definition in React.memo
+const Card = React.memo(function Card({ cardId }: CardProps) {
   const cards = useAtomValue(currentCardsAtom);
   const cardData = cards[cardId];
   const updateText = useSetAtom(updateCardTextAtom);
@@ -124,13 +125,16 @@ function Card({ cardId }: CardProps) {
   const resizeHandleSize = 20;
   const resizeHandleOffset = 4; // Small offset from the corner
 
-  // Memoize styles/attributes that depend on theme
+  // Memoize styles/attributes that depend on theme AND isDragging
   const rectStyle = useMemo(() => ({
     fill: theme.palette.background.paper,
-    stroke: theme.palette.divider,
-    strokeWidth: 1,
-    rx: theme.shape.borderRadius, // Use theme for rounded corners
-  }), [theme]);
+    // Change stroke color and width when dragging
+    stroke: isDragging ? theme.palette.primary.main : theme.palette.divider,
+    strokeWidth: isDragging ? 2 : 1,
+    rx: theme.shape.borderRadius,
+    // Add transition for stroke properties
+    transition: 'stroke 0.2s ease-out, stroke-width 0.2s ease-out',
+  }), [theme, isDragging]);
 
   // Effect to animate scale-in on mount
   useEffect(() => {
@@ -146,15 +150,18 @@ function Card({ cardId }: CardProps) {
   return (
     <g
       ref={cardRef}
-      transform={`${cardTransform} scale(${scale})`}
+      transform={`${cardTransform} scale(${isDragging ? scale * 1.05 : scale})`}
       data-draggable-card="true"
       {...draggableProps}
       onDoubleClick={handleDoubleClick}
+      onClick={() => console.log(`[Card ${cardId}] onClick, isEditing: ${isEditing}`)}
       style={{
         cursor: isEditing ? 'default' : 'grab',
         opacity: isDragging ? 0.8 : 1,
-        transition: 'transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28)', // Example transition
+        transition: 'transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28), filter 0.2s ease-out', // Add filter transition
         transformOrigin: `${currentSize.width / 2}px ${currentSize.height / 2}px`,
+        // Apply drop shadow when dragging for visual feedback
+        filter: isDragging ? 'drop-shadow( 3px 5px 4px rgba(0,0,0,0.3))' : 'none',
       }}
     >
       <rect
@@ -282,6 +289,6 @@ function Card({ cardId }: CardProps) {
 
     </g>
   );
-}
+});
 
 export default Card; 
