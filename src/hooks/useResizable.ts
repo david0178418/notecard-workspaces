@@ -35,7 +35,6 @@ export function useResizable({
   const updateSize = useSetAtom(updateCardSizeAtom);
   const [isResizing, setIsResizing] = useState(false);
   const [startSize, setStartSize] = useState<Size>(initialSize);
-  const [startMousePos, setStartMousePos] = useState<{ x: number; y: number } | null>(null);
   const cardSvgRef = useRef<SVGSVGElement | null>(null);
   const startScreenPosRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -81,7 +80,7 @@ export function useResizable({
       startScreenPosRef.current = { x: event.clientX, y: event.clientY };
     }
 
-  }, [isEnabled, cardRef, updateSize, cardId, getMousePositionInSvg]);
+  }, [isEnabled, cardRef, cardId, getMousePositionInSvg]);
 
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
@@ -109,10 +108,9 @@ export function useResizable({
 
     event.stopPropagation();
     setIsResizing(false);
-    setStartMousePos(null);
     startScreenPosRef.current = null;
 
-  }, [isResizing, handleMouseMove]);
+  }, [isResizing]);
 
 
   // Manage global listeners based on isResizing state

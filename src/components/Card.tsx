@@ -7,9 +7,7 @@ import {
   currentCardsAtom,
   updateCardTextAtom,
   deleteCardAtom,
-  interactionOrderAtom,
   lastCreatedCardIdAtom,
-  updateCardSizeAtom,
 } from '../state/atoms';
 import { useDraggable } from '../hooks/useDraggable';
 import { useTheme } from '@mui/material/styles';
@@ -32,8 +30,6 @@ const Card = React.memo(function Card({ cardId }: CardProps) {
   const cardData = cards[cardId];
   const updateText = useSetAtom(updateCardTextAtom);
   const deleteCard = useSetAtom(deleteCardAtom);
-  const updateSize = useSetAtom(updateCardSizeAtom);
-  const interactionOrder = useAtomValue(interactionOrderAtom);
   const [lastCreatedCardId, setLastCreatedCardId] = useAtom(lastCreatedCardIdAtom);
   const theme = useTheme();
 
@@ -53,7 +49,7 @@ const Card = React.memo(function Card({ cardId }: CardProps) {
   });
 
   // Use Resizable Hook
-  const { isResizing, resizableProps } = useResizable({
+  const { resizableProps } = useResizable({
     cardId,
     initialSize: cardData?.size ?? { width: MIN_CARD_WIDTH, height: MIN_CARD_HEIGHT },
     cardRef,

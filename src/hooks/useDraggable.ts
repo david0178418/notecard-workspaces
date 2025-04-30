@@ -5,7 +5,7 @@ import {
   currentViewStateAtom,
   bringCardToFrontAtom,
 } from '../state/atoms';
-import type { Point, ViewState } from '../types';
+import type { Point /*, ViewState */ } from '../types'; // Removed unused ViewState
 
 // Define props specifically for SVGGElement as used in Card.tsx
 interface UseDraggableProps {

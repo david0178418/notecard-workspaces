@@ -30,7 +30,7 @@ export function usePanZoom({ initialViewState, containerRef }: UsePanZoomProps) 
   const touchIdentifier = useRef<number | null>(null);
   const pinchTouches = useRef<[number, number] | null>(null);
   const initialPinchState = useRef<{ distance: number, midpoint: Point, pan: Point, zoom: number } | null>(null);
-  const endPanInteractionRef = useRef<() => void>();
+  const endPanInteractionRef = useRef<(() => void) | null>(null);
 
   const updateStateAtom = useSetAtom(updateViewStateAtom);
 
