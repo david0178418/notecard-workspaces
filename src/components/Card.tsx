@@ -38,6 +38,7 @@ function Card({ cardId }: CardProps) {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(cardData?.text ?? '');
+  const [scale, setScale] = useState(0); // Initial scale state
 
   // Ref now points to the main SVG group element
   const cardRef = useRef<SVGGElement>(null);
@@ -131,14 +132,30 @@ function Card({ cardId }: CardProps) {
     rx: theme.shape.borderRadius, // Use theme for rounded corners
   }), [theme]);
 
+  // Effect to animate scale-in on mount
+  useEffect(() => {
+    // Double requestAnimationFrame ensures the initial state (scale 0)
+    // has rendered before we trigger the transition to scale 1.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setScale(1);
+      });
+    });
+  }, []); // Empty dependency array ensures this runs only once on mount
+
   return (
     <g
       ref={cardRef}
-      transform={cardTransform}
+      transform={`${cardTransform} scale(${scale})`}
       data-draggable-card="true"
       {...draggableProps}
       onDoubleClick={handleDoubleClick}
-      style={{ cursor: isEditing ? 'default' : 'grab', opacity: isDragging ? 0.8 : 1 }}
+      style={{
+        cursor: isEditing ? 'default' : 'grab',
+        opacity: isDragging ? 0.8 : 1,
+        transition: 'transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28)', // Example transition
+        transformOrigin: `${currentSize.width / 2}px ${currentSize.height / 2}px`,
+      }}
     >
       <rect
         x={0}

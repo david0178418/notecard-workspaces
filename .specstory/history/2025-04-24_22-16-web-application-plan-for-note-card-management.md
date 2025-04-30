@@ -17549,3 +17549,174 @@ Great. The drag now functions.  However, it seems to not to be following the cur
 
 ---
 
+_**Assistant**_
+
+
+
+---
+
+You're right, that's a classic issue when dealing with interactions in a zoomed environment! The mouse movement (`dx`, `dy`) calculated in SVG coordinates doesn't directly correspond to the visual movement on screen when there's a zoom factor applied.
+
+The `getMousePositionInSvg` function correctly converts the screen coordinates to SVG coordinates, but the `handleMouseMove` function then uses the delta between these SVG coordinates (`mousePos.x - startMousePos.x`) to directly adjust the size. This delta needs to be scaled by the zoom factor.
+
+To fix this, we need to:
+1.  Store the initial *screen* mouse position (`event.clientX`, `event.clientY`) when resizing starts (`handleMouseDown`).
+2.  Get the current zoom level from the application state.
+3.  In `handleMouseMove`, calculate the delta based on the difference between the *current* screen position and the *starting* screen position.
+4.  Divide this screen delta by the zoom level to get the correct size adjustment in SVG units.
+
+First, let's find where the zoom level or view state is stored. I'll search the codebase for relevant atoms or state variables.
+
+---
+
+<details>
+            <summary>Searched codebase "atom managing zoom or view state" • **25** results</summary>
+        
+| File | Lines |
+|------|-------|
+| `src/state/atoms.ts` | L409-431 |
+| `src/state/atoms.ts` | L76-82 |
+| `src/state/atoms.ts` | L139-167 |
+| `src/state/atoms.ts` | L100-103 |
+| `src/hooks/usePanZoom.ts` | L1-9 |
+| `src/state/atoms.ts` | L442-479 |
+| `src/hooks/usePanZoom.ts` | L22-52 |
+| `src/state/atoms.ts` | L20-49 |
+| `src/state/atoms.ts` | L328-364 |
+| `src/hooks/usePanZoom.ts` | L138-168 |
+| `src/components/Workspace.tsx` | L1-57 |
+| `src/hooks/usePanZoom.ts` | L168-211 |
+| `src/hooks/useDraggable.ts` | L12-70 |
+| `src/state/atoms.ts` | L49-59 |
+| `src/state/atoms.ts` | L364-378 |
+| `src/types/index.ts` | L20-25 |
+| `src/App.tsx` | L21-62 |
+| `src/state/atoms.ts` | L59-63 |
+| `src/App.tsx` | L1-21 |
+| `src/state/atoms.ts` | L65-71 |
+| `src/state/atoms.ts` | L97-100 |
+| `src/state/atoms.ts` | L272-300 |
+| `src/state/atoms.ts` | L216-244 |
+| `src/state/atoms.ts` | L63-65 |
+| `src/state/atoms.ts` | L1-7 |
+
+</details>
+
+---
+
+Okay, the search results point clearly to `src/state/atoms.ts` and the `currentViewStateAtom`. This atom provides the current `pan` and `zoom` values for the active workspace.
+
+Now, let's modify `useResizable.ts`:
+
+1.  Import `useAtomValue` from Jotai and `currentViewStateAtom`.
+2.  Get the `zoom` value from `currentViewStateAtom`.
+3.  Store the initial *screen* coordinates (`event.clientX`, `event.clientY`) in a new ref (`startScreenPosRef`) inside `handleMouseDown`.
+4.  In `handleMouseMove`, calculate the delta using `event.clientX/Y` and the stored `startScreenPosRef.current.x/y`.
+5.  Divide this `screenDeltaX` and `screenDeltaY` by the `zoom` factor before adding to `startSize`.
+
+---
+
+```diff
+  import { useSetAtom } from 'jotai';
+  import { updateCardSizeAtom } from '../state/atoms';
++ import { useAtomValue } from 'jotai';
++ import { currentViewStateAtom } from '../state/atoms';
+  import { MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../components/Card'; // Import min sizes
+  
+```
+
+```diff
+    const [startMousePos, setStartMousePos] = useState<{ x: number; y: number } | null>(null);
+    const cardSvgRef = useRef<SVGSVGElement | null>(null);
++   const startScreenPosRef = useRef<{ x: number; y: number } | null>(null);
++ 
++   const { zoom } = useAtomValue(currentViewStateAtom);
+  
+    // Get the SVG element reference once
+```
+
+```diff
+      if(mousePos) {
+        setStartMousePos(mousePos);
++       startScreenPosRef.current = { x: event.clientX, y: event.clientY };
+      }
+  
+```
+
+```diff
+      console.log('[Resizable] handleMouseMove called'); // LOGGING: Check if handler is invoked
+      console.log('[Resizable] Checking condition:', { isResizing, startMousePos, cardRefCurrent: cardRef.current }); // LOGGING: Check condition values
+-     if (!isResizing || !startMousePos || !cardRef.current ) return;
++     if (!isResizing || !startScreenPosRef.current || !cardRef.current ) return;
+  
+      console.log('[Resizable] Mouse Move Triggered'); // LOGGING
+-     const mousePos = getMousePositionInSvg(event);
+-     if (!mousePos) return;
+- 
+- 
+-     const dx = mousePos.x - startMousePos.x;
+-     const dy = mousePos.y - startMousePos.y;
+- 
+-     // Calculate new size, respecting minimum dimensions
+-     const newWidth = Math.max(MIN_CARD_WIDTH, startSize.width + dx);
+-     const newHeight = Math.max(MIN_CARD_HEIGHT, startSize.height + dy);
++     const currentScreenX = event.clientX;
++     const currentScreenY = event.clientY;
++ 
++     const screenDeltaX = currentScreenX - startScreenPosRef.current.x;
++     const screenDeltaY = currentScreenY - startScreenPosRef.current.y;
++ 
++     const scaledDx = screenDeltaX / zoom;
++     const scaledDy = screenDeltaY / zoom;
++ 
++     const newWidth = Math.max(MIN_CARD_WIDTH, startSize.width + scaledDx);
++     const newHeight = Math.max(MIN_CARD_HEIGHT, startSize.height + scaledDy);
+  
+-     console.log('[Resizable] Calculated New Size:', { dx, dy, newWidth, newHeight, startSize }); // LOGGING
+- 
+-     // Directly update size visually for smoother feedback (optional, depends on performance)
+-     // const rect = cardRef.current.querySelector('rect');
+-     // if (rect) {
+-     //   rect.setAttribute('width', newWidth.toString());
+-     //   rect.setAttribute('height', newHeight.toString());
+-     // }
+- 
+-     // Consider adding throttling/debouncing if performance issues arise
++     console.log('[Resizable] Calculated New Size:', { screenDeltaX, screenDeltaY, zoom, scaledDx, scaledDy, newWidth, newHeight, startSize }); // Updated LOGGING
++ 
+      updateSize({ cardId, size: { width: newWidth, height: newHeight } });
+  
+-   }, [isResizing, startMousePos, startSize, cardId, updateSize, cardRef, getMousePositionInSvg]);
++   }, [isResizing, startScreenPosRef, startSize, cardId, updateSize, cardRef, getMousePositionInSvg, zoom]);
+  
+  
+```
+
+```diff
+      setIsResizing(false);
+      setStartMousePos(null);
++     startScreenPosRef.current = null;
+  
+    }, [isResizing, handleMouseMove]);
+```
+
+---
+
+Alright, I've updated the `useResizable` hook to incorporate the zoom level. It now calculates the size delta based on screen coordinates and scales it appropriately using the zoom value from `currentViewStateAtom`.
+
+This should make the resizing behavior accurately follow your cursor, regardless of the current zoom level. Give it a try!
+
+---
+
+_**User**_
+
+Great.  Now, can we restore the scale animation when the cards are created?
+
+---
+
+_**Assistant**_
+
+
+
+---
+
